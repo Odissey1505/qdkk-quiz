@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ЩО? ДЕ? КОЛИ? — База запитань</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="supabase.js"></script>
+</head>
+<body>
+
+<!-- ===== ШАПКА ===== -->
+<header class="site-header">
+  <div class="header-inner">
+    <div class="site-logo">ЩДК <span>/ база запитань</span></div>
+    <nav class="nav-links">
+      <a href="index.html" class="active">Пакети</a>
+      <a href="randomizer.html">🎲 Рандомайзер</a>
+      <a href="#" onclick="openImportModal(); return false;">+ Імпорт</a>
+    </nav>
+  </div>
+</header>
+
+<!-- ===== ОСНОВНИЙ КОНТЕНТ ===== -->
+<main class="main-content">
+  <h1 class="page-title">Всі <span class="highlight">пакети</span></h1>
+  <p class="page-subtitle" id="subtitle">Завантажте PDF або TXT, або додайте пакет вручну</p>
+
+  <!-- Статистика -->
+  <div class="stats-bar" id="statsBar" style="display:none">
+    <div class="stat-pill">📦 <span class="stat-num" id="statPacks">0</span> пакетів</div>
+    <div class="stat-pill">❓ <span class="stat-num" id="statQuestions">0</span> запитань</div>
+  </div>
+
+  <!-- Тулбар -->
+  <div class="toolbar">
+    <div class="search-box">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="searchInput" placeholder="Пошук по запитаннях, відповідях, назвах ігор…" oninput="handleSearch()" />
+    </div>
+    <button class="btn btn-primary" onclick="openImportModal()">
+      📄 Імпорт PDF / TXT
+    </button>
+    <button class="btn btn-secondary" onclick="openManualModal()">
+      ✏️ Вручну
+    </button>
+    <select id="sortSelect" onchange="filterPackages()"
+            style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);
+                   color:var(--text-muted);font-family:'Source Sans 3',sans-serif;font-size:0.88rem;
+                   padding:0.6rem 0.85rem;cursor:pointer;outline:none;">
+      <option value="date-desc">Новіші спочатку</option>
+      <option value="date-asc">Старіші спочатку</option>
+      <option value="title">За назвою</option>
+    </select>
+  </div>
+
+  <!-- Сітка пакетів -->
+  <div id="packagesGrid"></div>
+
+  <!-- Результати пошуку по запитаннях -->
+  <div id="searchResultsWrap" style="display:none;">
+    <div class="search-results-header">
+      <span id="searchResultsCount"></span>
+      <button class="btn btn-ghost" onclick="clearSearch()" style="font-size:0.82rem;padding:0.3rem 0.7rem;border:1px solid var(--border);">✕ Скасувати</button>
+    </div>
+    <div id="searchResults"></div>
+  </div>
+
+  <!-- Порожній стан -->
+  <div class="empty-state" id="emptyState">
+    <div class="empty-icon">🦉</div>
+    <h3>Ще немає пакетів</h3>
+    <p>Завантажте PDF або TXT з запитаннями або додайте пакет вручну</p>
+  </div>
+</main>
+
+<!-- ===== МОДАЛЬНЕ ВІКНО: ІМПОРТ PDF ===== -->
+<div class="modal-overlay" id="importModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title">📄 Імпорт PDF / TXT</h2>
+      <button class="modal-close" onclick="closeImportModal()">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Drop zone -->
+      <div class="drop-zone" id="dropZone"
+           onclick="document.getElementById('pdfFileInput').click()"
+           ondragover="handleDragOver(event)"
+           ondragleave="handleDragLeave(event)"
+           ondrop="handleDrop(event)">
+        <input type="file" id="pdfFileInput" accept=".pdf,.txt,text/plain" multiple onchange="handleFileSelect(event)" />
+        <div class="drop-icon">📂</div>
+        <div class="drop-text">
+          <strong>Натисніть або перетягніть PDF або TXT</strong><br>
+          Можна обрати кілька файлів одночасно
+        </div>
+      </div>
+
+      <!-- Прогрес-бар -->
+      <div class="progress-bar" id="progressBar">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+
+      <!-- Лог -->
+      <div class="parse-log" id="parseLog"></div>
+
+      <!-- Інфо про пакет -->
+      <div id="packageFormSection" style="display:none; margin-top:1.25rem;">
+        <div class="form-group">
+          <label class="form-label">Назва пакету *</label>
+          <input type="text" class="form-input" id="impTitle" placeholder="Наприклад: Фінал чемпіонату міста 2024" />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Турнір</label>
+            <input type="text" class="form-input" id="impTournament" placeholder="Чемпіонат міста" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Дата</label>
+            <input type="date" class="form-input" id="impDate" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Місце / результат команди</label>
+          <input type="text" class="form-input" id="impResult" placeholder="2 місце, 14/18 балів" />
+        </div>
+      </div>
+
+      <!-- Попередній перегляд -->
+      <div id="previewSection" style="display:none; margin-top:1.25rem;">
+        <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:0.75rem;">
+          Розпізнано запитань: <strong id="previewCount" style="color:var(--accent)">0</strong>
+        </p>
+        <div id="previewList" style="max-height:200px; overflow-y:auto; display:flex; flex-direction:column; gap:0.5rem;"></div>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeImportModal()">Скасувати</button>
+      <button class="btn btn-primary" id="saveImportBtn" onclick="saveImportedPackage()" disabled>
+        💾 Зберегти пакет
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== МОДАЛЬНЕ ВІКНО: РУЧНЕ ВВЕДЕННЯ ===== -->
+<div class="modal-overlay" id="manualModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title">✏️ Новий пакет вручну</h2>
+      <button class="modal-close" onclick="closeManualModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Назва пакету *</label>
+        <input type="text" class="form-input" id="manTitle" placeholder="Наприклад: Відкритий кубок — весна 2025" />
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Турнір</label>
+          <input type="text" class="form-input" id="manTournament" placeholder="Назва турніру" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Дата</label>
+          <input type="date" class="form-input" id="manDate" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Місце / результат</label>
+        <input type="text" class="form-input" id="manResult" placeholder="1 місце, 18/18" />
+      </div>
+
+      <div id="manQuestionsContainer">
+        <!-- Запитання додаються динамічно -->
+      </div>
+
+      <button class="btn btn-ghost" onclick="addManualQuestion()" style="margin-top:0.5rem; width:100%; justify-content:center; border: 1px dashed var(--border);">
+        + Додати запитання
+      </button>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeManualModal()">Скасувати</button>
+      <button class="btn btn-primary" onclick="saveManualPackage()">💾 Зберегти</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== ТОСТИ ===== -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+// ============================================
+//  НАЛАШТУВАННЯ PDF.js
+// ============================================
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// ============================================
+//  СТАН
+// ============================================
+
+// ============================================
+//  РЕНДЕР ГОЛОВНОЇ СТОРІНКИ
+// ============================================
+let allPackages = [];
+
+// ── Витягнути рік з пакету ───────────────────
+function getPackageYear(pkg) {
+  if (pkg.date) {
+    const y = new Date(pkg.date).getFullYear();
+    if (!isNaN(y) && y > 2000) return y;
+  }
+  // Спроба витягти рік з назви (напр. "Гра 1 (22.03.2026)")
+  const m = pkg.title.match(/\b(20\d{2})\b/);
+  if (m) return parseInt(m[1]);
+  return null;
+}
+
+// ── Сортування ────────────────────────────────
+function sortPackages(packages) {
+  const sort = document.getElementById('sortSelect')?.value || 'date-desc';
+  const sorted = [...packages];
+  sorted.sort((a, b) => {
+    if (sort === 'title') return a.title.localeCompare(b.title, 'uk');
+    const da = a.date ? new Date(a.date) : new Date(0);
+    const db = b.date ? new Date(b.date) : new Date(0);
+    return sort === 'date-asc' ? da - db : db - da;
+  });
+  return sorted;
+}
+
+// ── Рендер картки пакету ─────────────────────
+function buildPackageCard(pkg) {
+  // Перші 3 запитання для попапу
+  const preview = (pkg.questions || []).slice(0, 3);
+  const previewHTML = preview.map(q => `
+    <div class="preview-q">
+      <span class="preview-num">${q.number}.</span>
+      <span class="preview-text">${escHtml(q.question)}</span>
+    </div>`).join('');
+  const remaining = pkg.questions.length - 3;
+
+  return `
+    <div class="package-card" onclick="openPackage('${pkg.id}')"
+         onmouseenter="showPreview(event,'${pkg.id}')"
+         onmouseleave="hidePreview('${pkg.id}')">
+      <div class="package-card-header">
+        <div class="package-title">${escHtml(pkg.title)}</div>
+        <div class="package-actions" onclick="event.stopPropagation()">
+          <button class="btn btn-ghost" onclick="openPackage('${pkg.id}')" title="Відкрити" style="font-size:0.8rem;padding:0.3rem 0.6rem;">👁</button>
+          <button class="btn btn-ghost" onclick="deletePackage('${pkg.id}')" title="Видалити" style="font-size:0.8rem;padding:0.3rem 0.6rem;color:var(--danger);">🗑</button>
+        </div>
+      </div>
+      <div class="package-meta">
+        ${pkg.date ? `<span class="meta-item">📅 ${formatDate(pkg.date)}</span>` : ''}
+        ${pkg.tournament ? `<span class="meta-item">🏆 ${escHtml(pkg.tournament)}</span>` : ''}
+        ${pkg.result ? `<span class="package-tag">${escHtml(pkg.result)}</span>` : ''}
+      </div>
+      <div class="package-count">
+        <strong>${pkg.questions.length}</strong> запитань
+      </div>
+
+      <!-- Попап швидкого перегляду -->
+      <div class="preview-popup pos-bottom" id="preview_${pkg.id}">
+        <div class="preview-title">
+          <span>Швидкий перегляд</span>
+          <span style="font-family:'Source Sans 3',sans-serif;font-size:0.75rem;font-weight:400;color:var(--text-dim);">
+            ${pkg.questions.length} запитань
+          </span>
+        </div>
+        ${previewHTML}
+        ${remaining > 0 ? `<div class="preview-footer">… і ще ${remaining} запитань — натисни щоб відкрити</div>` : '<div class="preview-footer">Натисни щоб відкрити</div>'}
+      </div>
+    </div>`;
+}
+
+// ── Головний рендер з групуванням по роках ────
+function renderPackages(packages) {
+  const grid = document.getElementById('packagesGrid');
+  const empty = document.getElementById('emptyState');
+  const isSearching = (document.getElementById('searchInput')?.value || '').trim().length > 0;
+
+  if (packages.length === 0) {
+    grid.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  const sorted = sortPackages(packages);
+  const sort = document.getElementById('sortSelect')?.value || 'date-desc';
+
+  // При пошуку або сортуванні за назвою — без угруповання
+  if (isSearching || sort === 'title') {
+    grid.innerHTML = `<div class="packages-grid">${sorted.map(buildPackageCard).join('')}</div>`;
+    return;
+  }
+
+  // Групуємо по роках
+  const groups = {};
+  const noYear = [];
+  for (const pkg of sorted) {
+    const y = getPackageYear(pkg);
+    if (y) {
+      if (!groups[y]) groups[y] = [];
+      groups[y].push(pkg);
+    } else {
+      noYear.push(pkg);
+    }
+  }
+
+  // Роки відсортовані
+  const years = Object.keys(groups).map(Number).sort((a, b) =>
+    sort === 'date-asc' ? a - b : b - a
+  );
+
+  let html = '';
+  for (const year of years) {
+    const yearPkgs = groups[year];
+    const totalQ = yearPkgs.reduce((s, p) => s + p.questions.length, 0);
+    html += `
+      <div class="year-group">
+        <div class="year-header">
+          <div class="year-badge">${year}</div>
+          <div class="year-meta">
+            <span>${yearPkgs.length} ${pluralUk(yearPkgs.length, 'пакет', 'пакети', 'пакетів')}</span>
+            <span class="year-dot">·</span>
+            <span>${totalQ} запитань</span>
+          </div>
+          <div class="year-line"></div>
+        </div>
+        <div class="packages-grid">${yearPkgs.map(buildPackageCard).join('')}</div>
+      </div>`;
+  }
+
+  if (noYear.length > 0) {
+    html += `
+      <div class="year-group">
+        <div class="year-header">
+          <div class="year-badge" style="color:var(--text-dim);border-color:var(--border);">?</div>
+          <div class="year-meta"><span>Без дати</span></div>
+          <div class="year-line"></div>
+        </div>
+        <div class="packages-grid">${noYear.map(buildPackageCard).join('')}</div>
+      </div>`;
+  }
+
+  grid.innerHTML = html;
+}
+
+function pluralUk(n, one, few, many) {
+  const mod10 = n % 10, mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few;
+  return many;
+}
+
+function updateStats() {
+  const total = allPackages.reduce((s, p) => s + p.questions.length, 0);
+  document.getElementById('statPacks').textContent = allPackages.length;
+  document.getElementById('statQuestions').textContent = total;
+  const bar = document.getElementById('statsBar');
+  const sub = document.getElementById('subtitle');
+  if (allPackages.length > 0) {
+    bar.style.display = 'flex';
+    sub.style.display = 'none';
+  } else {
+    bar.style.display = 'none';
+    sub.style.display = 'block';
+  }
+}
+
+// ── Головна функція пошуку ───────────────────
+function handleSearch() {
+  const q = document.getElementById('searchInput').value.trim();
+  if (q.length === 0) {
+    clearSearch();
+    return;
+  }
+  if (q.length < 2) return; // чекаємо мінімум 2 символи
+
+  const lower = q.toLowerCase();
+
+  // Пошук по назвах пакетів
+  const pkgMatches = allPackages.filter(p =>
+    p.title.toLowerCase().includes(lower) ||
+    (p.tournament || '').toLowerCase().includes(lower)
+  );
+
+  // Пошук по запитаннях і відповідях
+  const qMatches = [];
+  for (const pkg of allPackages) {
+    for (const question of (pkg.questions || [])) {
+      const inQ = (question.question || '').toLowerCase().includes(lower);
+      const inA = (question.answer   || '').toLowerCase().includes(lower);
+      const inC = (question.comment  || '').toLowerCase().includes(lower);
+      if (inQ || inA || inC) {
+        qMatches.push({ pkg, question, inQ, inA, inC });
+      }
+    }
+  }
+
+  // Якщо є результати по запитаннях — показуємо окрему панель
+  if (qMatches.length > 0 || pkgMatches.length === 0) {
+    showSearchResults(q, qMatches, pkgMatches);
+  } else {
+    // Тільки збіги по назвах — фільтруємо звичайну сітку
+    hideSearchResults();
+    renderPackages(pkgMatches);
+  }
+}
+
+function filterPackages() {
+  // Стара функція — тепер делегує в handleSearch
+  handleSearch();
+}
+
+// ── Показати результати пошуку по запитаннях ─
+function showSearchResults(query, qMatches, pkgMatches) {
+  const grid = document.getElementById('packagesGrid');
+  const wrap = document.getElementById('searchResultsWrap');
+  const countEl = document.getElementById('searchResultsCount');
+  const resultsEl = document.getElementById('searchResults');
+
+  grid.style.display = 'none';
+  wrap.style.display = 'block';
+
+  const total = qMatches.length;
+  countEl.innerHTML = `Знайдено <strong style="color:var(--accent)">${total}</strong> запитань по запиту «${escHtml(query)}»`;
+
+  if (total === 0) {
+    resultsEl.innerHTML = '<div class="empty-state" style="padding:3rem 0;"><div class="empty-icon">🔎</div><h3>Нічого не знайдено</h3><p>Спробуйте інший запит</p></div>';
+    return;
+  }
+
+  // Групуємо по пакетах
+  const byPkg = {};
+  for (const m of qMatches) {
+    if (!byPkg[m.pkg.id]) byPkg[m.pkg.id] = { pkg: m.pkg, matches: [] };
+    byPkg[m.pkg.id].matches.push(m);
+  }
+
+  let html = '';
+  for (const { pkg, matches } of Object.values(byPkg)) {
+    html += `
+      <div class="search-pkg-group">
+        <div class="search-pkg-title" onclick="openPackage('${pkg.id}')">
+          📦 ${escHtml(pkg.title)}
+          <span class="search-pkg-count">${matches.length} збіг${matches.length === 1 ? '' : matches.length < 5 ? 'и' : 'ів'}</span>
+        </div>
+        ${matches.map(m => buildSearchResultCard(m, query)).join('')}
+      </div>`;
+  }
+  resultsEl.innerHTML = html;
+}
+
+function buildSearchResultCard(m, query) {
+  const { pkg, question, inQ, inA, inC } = m;
+
+  function highlight(text, q) {
+    if (!text) return '';
+    const idx = text.toLowerCase().indexOf(q.toLowerCase());
+    if (idx === -1) return escHtml(text.substring(0, 120));
+    const start = Math.max(0, idx - 40);
+    const end   = Math.min(text.length, idx + q.length + 60);
+    const pre   = start > 0 ? '…' : '';
+    const post  = end < text.length ? '…' : '';
+    return escHtml(pre + text.substring(start, idx)) +
+      `<mark style="background:rgba(201,168,76,0.3);color:var(--accent);border-radius:2px;padding:0 2px;">${escHtml(text.substring(idx, idx + q.length))}</mark>` +
+      escHtml(text.substring(idx + q.length, end) + post);
+  }
+
+  const spoilerId = `sr_${pkg.id}_${question.number}`;
+  const hasAnswer = question.answer || question.comment;
+
+  return `
+    <div class="search-result-card">
+      <div class="search-result-header">
+        <span class="q-number" style="font-size:1.1rem;">${question.number}</span>
+        <div class="q-body" style="flex:1;">
+          ${question.topic ? `<div class="q-topic">${escHtml(question.topic)}</div>` : ''}
+          <div class="q-text">${inQ ? highlight(question.question, query) : escHtml((question.question||'').substring(0,120)+'…')}</div>
+          ${(inA || inC) && hasAnswer ? `
+            <div style="margin-top:0.4rem;font-size:0.85rem;color:var(--spoiler-text);">
+              → ${highlight(question.answer || question.comment, query)}
+            </div>` : ''}
+        </div>
+        ${hasAnswer ? `
+          <button class="spoiler-toggle" id="stog_${spoilerId}" onclick="toggleSearchSpoiler('${spoilerId}')"
+                  style="margin:0;padding:0.3rem 0.75rem;font-size:0.78rem;">
+            <span class="arrow">▶</span> Відповідь
+          </button>` : ''}
+      </div>
+      ${hasAnswer ? `
+        <div class="spoiler-content" id="${spoilerId}">
+          <div class="answer-block">
+            ${question.answer  ? `<div class="answer-label">Відповідь</div><div class="answer-text">${escHtml(question.answer)}</div>` : ''}
+            ${question.comment ? `<div class="comment-label" style="margin-top:0.5rem;">Коментар</div><div class="comment-text">${escHtml(question.comment)}</div>` : ''}
+          </div>
+        </div>` : ''}
+    </div>`;
+}
+
+function toggleSearchSpoiler(id) {
+  const s = document.getElementById(id);
+  const b = document.getElementById(`stog_${id}`);
+  const open = s.classList.contains('visible');
+  s.classList.toggle('visible', !open);
+  b.classList.toggle('open', !open);
+  b.innerHTML = `<span class="arrow">▶</span> ${open ? 'Відповідь' : 'Сховати'}`;
+}
+
+function hideSearchResults() {
+  document.getElementById('packagesGrid').style.display = '';
+  document.getElementById('searchResultsWrap').style.display = 'none';
+}
+
+function clearSearch() {
+  document.getElementById('searchInput').value = '';
+  hideSearchResults();
+  renderPackages(allPackages);
+}
+
+function openPackage(id) {
+  window.location.href = `questions.html?id=${id}`;
+}
+
+async function deletePackage(id) {
+  if (!confirm('Видалити цей пакет?')) return;
+  try {
+    await dbDeletePackage(id);
+    allPackages = allPackages.filter(p => p.id !== id);
+    renderPackages(allPackages);
+    updateStats();
+    showToast('Пакет видалено', 'info');
+  } catch (err) {
+    showToast('Помилка видалення: ' + err.message, 'error');
+  }
+}
+
+// ============================================
+//  ІМПОРТ PDF / TXT
+// ============================================
+let parsedQuestions = [];
+
+function openImportModal() {
+  document.getElementById('importModal').classList.add('active');
+  resetImportModal();
+}
+
+function closeImportModal() {
+  document.getElementById('importModal').classList.remove('active');
+}
+
+function resetImportModal() {
+  parsedQuestions = [];
+  document.getElementById('pdfFileInput').value = '';
+  document.getElementById('parseLog').className = 'parse-log';
+  document.getElementById('parseLog').innerHTML = '';
+  document.getElementById('progressBar').className = 'progress-bar';
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('packageFormSection').style.display = 'none';
+  document.getElementById('previewSection').style.display = 'none';
+  document.getElementById('saveImportBtn').disabled = true;
+  ['impTitle','impTournament','impDate','impResult'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+}
+
+function handleDragOver(e) { e.preventDefault(); document.getElementById('dropZone').classList.add('drag-over'); }
+function handleDragLeave(e) { document.getElementById('dropZone').classList.remove('drag-over'); }
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('dropZone').classList.remove('drag-over');
+  const files = Array.from(e.dataTransfer.files).filter(f =>
+    f.type === 'application/pdf' || f.type === 'text/plain' || f.name.endsWith('.txt')
+  );
+  if (files.length) processPDFFiles(files);
+  else showToast('Підтримуються файли PDF та TXT', 'error');
+}
+
+function handleFileSelect(e) {
+  const files = Array.from(e.target.files);
+  if (files.length) processPDFFiles(files);
+}
+
+// Читає TXT файл як текст
+function readTxtFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => resolve(e.target.result);
+    reader.onerror = () => reject(new Error('Не вдалося прочитати файл'));
+    reader.readAsText(file, 'UTF-8');
+  });
+}
+
+async function processPDFFiles(files) {
+  const log = document.getElementById('parseLog');
+  const progress = document.getElementById('progressBar');
+  const fill = document.getElementById('progressFill');
+  log.className = 'parse-log visible';
+  progress.className = 'progress-bar visible';
+  log.innerHTML = '';
+  parsedQuestions = [];
+
+  addLog('info', `📂 Знайдено файлів: ${files.length}`);
+
+  for (let fi = 0; fi < files.length; fi++) {
+    const file = files[fi];
+    const isTxt = file.type === 'text/plain' || file.name.toLowerCase().endsWith('.txt');
+    addLog('info', `Обробка: ${file.name} (${isTxt ? 'TXT' : 'PDF'})`);
+
+    try {
+      let fullText = '';
+
+      if (isTxt) {
+        // ── TXT: просто читаємо як текст ──────────────────
+        fullText = await readTxtFile(file);
+        fill.style.width = ((fi + 1) / files.length * 100) + '%';
+        addLog('ok', `✔ TXT прочитано (${fullText.length} символів)`);
+
+      } else {
+        // ── PDF: витягуємо текст через PDF.js ─────────────
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+        for (let p = 1; p <= pdf.numPages; p++) {
+          const page = await pdf.getPage(p);
+          const pageContent = await page.getTextContent();
+          let pageText = '';
+          for (let i = 0; i < pageContent.items.length; i++) {
+            const item = pageContent.items[i];
+            if (!item.str) continue;
+            pageText += item.str;
+            const next = pageContent.items[i + 1];
+            if (next && next.str && !item.str.endsWith(' ') && !next.str.startsWith(' ')) {
+              pageText += ' ';
+            }
+          }
+          fullText += pageText + ' ';
+          fill.style.width = ((fi / files.length) + (p / pdf.numPages / files.length)) * 100 + '%';
+        }
+        addLog('info', `📝 PDF: ${fullText.length} символів — <a href="#" onclick="showRawText();return false;" style="color:var(--accent);text-decoration:underline">показати сирий текст</a>`, true);
+      }
+
+      window._lastPDFRawText = fullText;
+
+      const questions = parseQuestionsFromText(fullText);
+      addLog('ok', `✔ Розпізнано ${questions.length} запитань`);
+      parsedQuestions.push(...questions);
+
+      // Автозаповнення метаданих з першого файлу
+      if (fi === 0) {
+        const meta = extractPDFMeta(fullText);
+        if (meta.title) document.getElementById('impTitle').value = meta.title;
+        if (meta.date)  document.getElementById('impDate').value  = meta.date;
+        if (meta.title) addLog('info', `📋 Назва: ${meta.title}`);
+        if (meta.date)  addLog('info', `📅 Дата: ${meta.date}`);
+      }
+    } catch (err) {
+      addLog('err', `✖ Помилка: ${err.message}`);
+    }
+  }
+
+  fill.style.width = '100%';
+  addLog('ok', `Всього розпізнано: ${parsedQuestions.length} запитань`);
+
+  if (parsedQuestions.length > 0) {
+    showPreview(parsedQuestions);
+    document.getElementById('packageFormSection').style.display = 'block';
+    document.getElementById('saveImportBtn').disabled = false;
+  } else {
+    addLog('err', '⚠ Запитань не знайдено. Перевірте формат файлу.');
+  }
+}
+
+// ============================================
+//  ДІАГНОСТИКА — показати сирий текст PDF
+// ============================================
+function showRawText() {
+  const raw = window._lastPDFRawText || '(текст не знайдено)';
+  const log = document.getElementById('parseLog');
+  // показуємо перші 3000 символів щоб не перевантажувати
+  const preview = raw.substring(0, 3000) + (raw.length > 3000 ? '\n…(скорочено)' : '');
+  const div = document.createElement('div');
+  div.style.cssText = 'margin-top:0.5rem;padding:0.5rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:0.75rem;white-space:pre-wrap;word-break:break-all;color:var(--text-muted);max-height:300px;overflow-y:auto;';
+  div.textContent = preview;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+// ============================================
+//  ПАРСЕР ТЕКСТУ PDF
+//  Формат: суцільний текст, запитання нумеровані "1. ... Відповідь: ... (коментар)"
+//  Підтримує заголовок "Гра X. ДД.ММ.РРРР" і тури "Тур X."
+// ============================================
+
+// Витягує метадані з заголовка PDF (назва гри, дата, тур)
+function extractPDFMeta(text) {
+  const meta = { title: '', date: '', tour: '' };
+
+  // "Що? Де? Коли? Гра 2. 22.03.2026" або схоже
+  const gameMatch = text.match(/(?:Що\?\s*Де\?\s*Коли\?)[^\n]*?(?:Гра\s*(\d+)[.\s]+)?(\d{1,2}[.\/-]\d{1,2}[.\/-]\d{2,4})/i);
+  if (gameMatch) {
+    meta.title = gameMatch[1] ? `Гра ${gameMatch[1]}` : 'ЩДК';
+    // Парсимо дату DD.MM.YYYY → YYYY-MM-DD
+    const dateParts = gameMatch[2].split(/[.\/-]/);
+    if (dateParts.length === 3) {
+      const [d, m, y] = dateParts;
+      const year = y.length === 2 ? '20' + y : y;
+      meta.date = `${year}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+      meta.title += ` (${gameMatch[2]})`;
+    }
+  }
+
+  return meta;
+}
+
+function parseQuestionsFromText(text) {
+  // -------------------------------------------------------
+  // Формат PDF:
+  //   Тур N.
+  //   1. Текст запитання (може бути кілька рядків).
+  //   Відповідь: Текст відповіді.
+  //   Коментар: Текст коментаря (може бути кілька рядків).
+  //   2. Наступне запитання...
+  // -------------------------------------------------------
+
+  // Крок 1: нормалізація рядків
+  // Зберігаємо переноси — вони є нашими розділювачами
+  // Розбиваємо злиті рядки типу "слово.Відповідь:" або "слово.Коментар:"
+  const preprocessed = text
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/\.(Відповідь|Коментар)\s*:/gi, '.\n$1:');
+
+  const lines = preprocessed
+    .split('\n')
+    .map(l => l.trim())
+    .filter(l => l.length > 0);
+
+  // Крок 2: деякі PDF зливають крапку+наступне слово без пробілу
+  // "гурт\n.Відповідь:" — після join може стати "гурт .Відповідь:"
+  // Виправляємо: якщо рядок починається з крапки — переносимо крапку до попереднього
+  const fixedLines = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.startsWith('.') && fixedLines.length > 0) {
+      fixedLines[fixedLines.length - 1] += '.';
+      const rest = line.slice(1).trim();
+      if (rest) fixedLines.push(rest);
+    } else {
+      fixedLines.push(line);
+    }
+  }
+
+  // Крок 3: збираємо структуру { тур, номер, рядки_блоку }
+  // Блок запитання — все від "N." до наступного "N." або "Тур"
+  const blocks = []; // { tour, num, rawLines[] }
+  let currentTour = '';
+  let currentBlock = null;
+
+  const isQuestionStart = (line) => {
+    // "1. ", "10. ", "36. " — від 1 до 2 цифр, потім крапка+пробіл+велика/мала літера
+    return /^\d{1,2}\.\s+\S/.test(line);
+  };
+
+  const isTour = (line) => /^Тур\s+\d+\./i.test(line);
+
+  for (const line of fixedLines) {
+    if (isTour(line)) {
+      const m = line.match(/^Тур\s+(\d+)/i);
+      currentTour = m ? `Тур ${m[1]}` : line;
+      if (currentBlock) blocks.push(currentBlock);
+      currentBlock = null;
+      continue;
+    }
+
+    if (isQuestionStart(line)) {
+      if (currentBlock) blocks.push(currentBlock);
+      const m = line.match(/^(\d{1,2})\.\s+([\s\S]+)/);
+      currentBlock = {
+        tour: currentTour,
+        num: parseInt(m[1]),
+        rawLines: [m[2]], // перший рядок запитання (без номера)
+      };
+      continue;
+    }
+
+    if (currentBlock) {
+      currentBlock.rawLines.push(line);
+    }
+  }
+  if (currentBlock) blocks.push(currentBlock);
+
+  // Крок 4: парсимо кожен блок на запитання / відповідь / коментар
+  const questions = [];
+
+  for (const block of blocks) {
+    const { tour, num, rawLines } = block;
+    let qLines = [];
+    let aLines = [];
+    let cLines = [];
+    let mode = 'q'; // 'q' | 'a' | 'c'
+
+    for (const line of rawLines) {
+      // Перевіряємо чи рядок починає нову секцію
+      if (/^Відповідь\s*:/i.test(line)) {
+        mode = 'a';
+        const rest = line.replace(/^Відповідь\s*:\s*/i, '').trim();
+        if (rest) aLines.push(rest);
+        continue;
+      }
+      if (/^Коментар\s*:/i.test(line)) {
+        mode = 'c';
+        const rest = line.replace(/^Коментар\s*:\s*/i, '').trim();
+        if (rest) cLines.push(rest);
+        continue;
+      }
+
+      if (mode === 'q') qLines.push(line);
+      else if (mode === 'a') aLines.push(line);
+      else if (mode === 'c') cLines.push(line);
+    }
+
+    const question = qLines.join(' ').replace(/\s{2,}/g, ' ').trim();
+    const answer   = aLines.join(' ').replace(/\s{2,}/g, ' ').trim();
+    const comment  = cLines.join(' ').replace(/\s{2,}/g, ' ').trim();
+
+    if (question.length < 3) continue;
+
+    questions.push({ number: num, question, answer, comment, topic: tour });
+  }
+
+  // Відсортовані за номером, унікальні
+  const seen = new Set();
+  return questions
+    .filter(q => { if (seen.has(q.number)) return false; seen.add(q.number); return true; })
+    .sort((a, b) => a.number - b.number);
+}
+
+
+function showPreview(questions) {
+  const section = document.getElementById('previewSection');
+  const list = document.getElementById('previewList');
+  const count = document.getElementById('previewCount');
+  count.textContent = questions.length;
+  section.style.display = 'block';
+
+  list.innerHTML = questions.slice(0, 10).map(q => `
+    <div style="background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:0.65rem 1rem; font-size:0.85rem;">
+      <span style="color:var(--accent); font-weight:700; margin-right:0.5rem;">${q.number}.</span>
+      <span style="color:var(--text);">${escHtml(q.question.substring(0, 100))}${q.question.length > 100 ? '…' : ''}</span>
+      ${q.answer ? `<br><span style="color:var(--spoiler-text); font-size:0.8rem;">→ ${escHtml(q.answer)}</span>` : ''}
+    </div>
+  `).join('') + (questions.length > 10 ? `<div style="text-align:center; color:var(--text-muted); font-size:0.82rem; padding:0.5rem;">… і ще ${questions.length - 10}</div>` : '');
+}
+
+function addLog(type, text, isHtml = false) {
+  const log = document.getElementById('parseLog');
+  const div = document.createElement('div');
+  div.className = `log-${type}`;
+  if (isHtml) div.innerHTML = text;
+  else div.textContent = text;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+async function saveImportedPackage() {
+  const title = document.getElementById('impTitle').value.trim();
+  if (!title) { showToast('Введіть назву пакету', 'error'); return; }
+  if (parsedQuestions.length === 0) { showToast('Немає запитань для збереження', 'error'); return; }
+
+  const pkg = {
+    id: 'pkg_' + Date.now(),
+    title,
+    tournament: document.getElementById('impTournament').value.trim(),
+    date: document.getElementById('impDate').value,
+    result: document.getElementById('impResult').value.trim(),
+    questions: parsedQuestions,
+    createdAt: new Date().toISOString(),
+  };
+
+  try {
+    await dbInsertPackage(pkg);
+    allPackages.unshift(pkg);
+    renderPackages(allPackages);
+    updateStats();
+    closeImportModal();
+    showToast(`Пакет "${title}" збережено (${pkg.questions.length} запитань)`, 'success');
+  } catch (err) {
+    showToast('Помилка збереження: ' + err.message, 'error');
+  }
+}
+
+// ============================================
+//  РУЧНЕ ВВЕДЕННЯ
+// ============================================
+let manualQCount = 0;
+
+function openManualModal() {
+  manualQCount = 0;
+  document.getElementById('manQuestionsContainer').innerHTML = '';
+  document.getElementById('manualModal').classList.add('active');
+  addManualQuestion();
+}
+
+function closeManualModal() {
+  document.getElementById('manualModal').classList.remove('active');
+}
+
+function addManualQuestion() {
+  manualQCount++;
+  const n = manualQCount;
+  const container = document.getElementById('manQuestionsContainer');
+  const div = document.createElement('div');
+  div.id = `mq_${n}`;
+  div.style.cssText = 'background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:1rem;margin-bottom:0.75rem;';
+  div.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+      <span style="font-weight:700;color:var(--accent);font-family:'Playfair Display',serif;">№${n}</span>
+      ${n > 1 ? `<button class="btn btn-danger" onclick="this.closest('[id]').remove()" style="font-size:0.8rem;padding:0.2rem 0.6rem;">✕</button>` : ''}
+    </div>
+    <div class="form-group">
+      <label class="form-label">Запитання *</label>
+      <textarea class="form-input mq-question" rows="2" placeholder="Текст запитання…" style="resize:vertical;"></textarea>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Відповідь</label>
+        <input type="text" class="form-input mq-answer" placeholder="Правильна відповідь" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Тема</label>
+        <input type="text" class="form-input mq-topic" placeholder="Наприклад: Історія" />
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Коментар / Джерело</label>
+      <input type="text" class="form-input mq-comment" placeholder="Додаткова інформація" />
+    </div>
+  `;
+  container.appendChild(div);
+}
+
+async function saveManualPackage() {
+  const title = document.getElementById('manTitle').value.trim();
+  if (!title) { showToast('Введіть назву пакету', 'error'); return; }
+
+  const questions = [];
+  document.querySelectorAll('#manQuestionsContainer [id^="mq_"]').forEach((div, idx) => {
+    const q = div.querySelector('.mq-question').value.trim();
+    if (!q) return;
+    questions.push({
+      number: idx + 1,
+      question: q,
+      answer: div.querySelector('.mq-answer').value.trim(),
+      topic: div.querySelector('.mq-topic').value.trim(),
+      comment: div.querySelector('.mq-comment').value.trim(),
+    });
+  });
+
+  if (questions.length === 0) { showToast('Додайте хоча б одне запитання', 'error'); return; }
+
+  const pkg = {
+    id: 'pkg_' + Date.now(),
+    title,
+    tournament: document.getElementById('manTournament').value.trim(),
+    date: document.getElementById('manDate').value,
+    result: document.getElementById('manResult').value.trim(),
+    questions,
+    createdAt: new Date().toISOString(),
+  };
+
+  try {
+    await dbInsertPackage(pkg);
+    allPackages.unshift(pkg);
+    renderPackages(allPackages);
+    updateStats();
+    closeManualModal();
+    showToast(`Пакет "${title}" збережено`, 'success');
+  } catch (err) {
+    showToast('Помилка збереження: ' + err.message, 'error');
+  }
+}
+
+// ============================================
+//  ТОСТИ
+// ============================================
+function showToast(text, type = 'info') {
+  const icons = { success: '✅', error: '❌', info: 'ℹ️' };
+  const container = document.getElementById('toastContainer');
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.innerHTML = `<span>${icons[type]}</span><span>${text}</span>`;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
+}
+
+// ============================================
+//  УТИЛІТИ
+// ============================================
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function formatDate(d) {
+  if (!d) return '';
+  try {
+    return new Date(d).toLocaleDateString('uk-UA', { day:'numeric', month:'long', year:'numeric' });
+  } catch { return d; }
+}
+
+// ============================================
+//  INIT
+// ============================================
+document.addEventListener('DOMContentLoaded', async () => {
+  showLoadingState(true);
+  try {
+    allPackages = await dbLoadPackages();
+  } catch (err) {
+    showToast('Помилка підключення до бази: ' + err.message, 'error');
+    allPackages = [];
+  }
+  showLoadingState(false);
+  renderPackages(allPackages);
+  updateStats();
+});
+
+function showLoadingState(on) {
+  const grid = document.getElementById('packagesGrid');
+  if (on) {
+    grid.innerHTML = '<div style="text-align:center;padding:3rem;color:var(--text-dim);font-size:0.95rem;">⏳ Завантаження бази…</div>';
+  }
+}
+
+// ════════════════════════════════════════════
+//  ПОПАП ШВИДКОГО ПЕРЕГЛЯДУ
+// ════════════════════════════════════════════
+let previewTimer = null;
+
+function showPreview(e, pkgId) {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(() => {
+    const popup = document.getElementById(`preview_${pkgId}`);
+    if (!popup) return;
+
+    // Визначаємо позицію — знизу або зверху
+    const card = popup.parentElement;
+    const cardRect = card.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - cardRect.bottom;
+    const spaceRight = window.innerWidth - cardRect.right;
+
+    popup.className = 'preview-popup';
+    if (spaceBelow > 280) {
+      popup.classList.add('pos-bottom');
+    } else if (spaceRight > 380) {
+      popup.classList.add('pos-right');
+    } else {
+      popup.classList.add('pos-top');
+    }
+
+    popup.classList.add('visible');
+  }, 400); // затримка 400мс щоб не мигав при швидкому русі миші
+}
+
+function hidePreview(pkgId) {
+  clearTimeout(previewTimer);
+  const popup = document.getElementById(`preview_${pkgId}`);
+  if (popup) popup.classList.remove('visible');
+}
+
+// Ховаємо всі попапи при скролі
+document.addEventListener('scroll', () => {
+  document.querySelectorAll('.preview-popup.visible').forEach(p => p.classList.remove('visible'));
+}, { passive: true });
+
+</script>
+
+</body>
+</html>
