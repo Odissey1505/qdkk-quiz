@@ -1,0 +1,1175 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Рандомайзер — ЩДК</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="supabase.js"></script>
+  <style>
+    /* ── Рандомайзер специфічні стилі ── */
+    .rand-layout {
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      gap: 2rem;
+      align-items: start;
+    }
+
+    /* Панель налаштувань */
+    .settings-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.5rem;
+      position: sticky;
+      top: 84px;
+    }
+
+    .settings-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 1.25rem;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    /* Лічильник запитань */
+    .count-selector {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.5rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .count-btn {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text-muted);
+      font-family: 'Playfair Display', serif;
+      font-size: 1.1rem;
+      font-weight: 700;
+      padding: 0.65rem 0;
+      cursor: pointer;
+      transition: all var(--transition);
+      text-align: center;
+    }
+    .count-btn:hover { border-color: var(--accent-dim); color: var(--text); }
+    .count-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #0d1117;
+    }
+
+    .custom-count-wrap {
+      margin-bottom: 1.25rem;
+    }
+
+    /* Джерела (ігри) */
+    .sources-section {
+      margin-bottom: 1.25rem;
+    }
+
+    .sources-label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-bottom: 0.6rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .sources-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      max-height: 220px;
+      overflow-y: auto;
+    }
+
+    .source-item {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.45rem 0.6rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background var(--transition);
+      font-size: 0.87rem;
+    }
+    .source-item:hover { background: var(--bg-hover); }
+
+    .source-item input[type="checkbox"] {
+      accent-color: var(--accent);
+      width: 15px;
+      height: 15px;
+      flex-shrink: 0;
+      cursor: pointer;
+    }
+
+    .source-name {
+      flex: 1;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .source-count {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      flex-shrink: 0;
+    }
+
+    /* Опції */
+    .options-section { margin-bottom: 1.5rem; }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .toggle-row:last-child { border-bottom: none; }
+
+    .toggle-label {
+      font-size: 0.87rem;
+      color: var(--text-muted);
+    }
+
+    /* Toggle switch */
+    .toggle-switch {
+      position: relative;
+      width: 36px;
+      height: 20px;
+      flex-shrink: 0;
+    }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute;
+      inset: 0;
+      background: var(--border);
+      border-radius: 20px;
+      cursor: pointer;
+      transition: background var(--transition);
+    }
+    .toggle-slider::before {
+      content: '';
+      position: absolute;
+      width: 14px; height: 14px;
+      left: 3px; top: 3px;
+      background: white;
+      border-radius: 50%;
+      transition: transform var(--transition);
+    }
+    .toggle-switch input:checked + .toggle-slider { background: var(--accent); }
+    .toggle-switch input:checked + .toggle-slider::before { transform: translateX(16px); }
+
+    /* ── Область результатів ── */
+    .results-area { min-height: 400px; }
+
+    .results-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .results-meta {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+    .results-meta strong { color: var(--accent); font-family: 'Playfair Display', serif; font-size: 1.1rem; }
+
+    /* Стан очікування */
+    .idle-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 400px;
+      text-align: center;
+      color: var(--text-muted);
+    }
+    .idle-icon { font-size: 4rem; margin-bottom: 1rem; opacity: 0.3; }
+    .idle-state h3 { font-size: 1.3rem; color: var(--text-dim); margin-bottom: 0.4rem; }
+
+    /* Картки рандомних запитань */
+    .rand-question {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      margin-bottom: 1rem;
+      overflow: hidden;
+      animation: fadeSlideIn 0.3s ease both;
+    }
+
+    @keyframes fadeSlideIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .rand-question:nth-child(1)  { animation-delay: 0.03s; }
+    .rand-question:nth-child(2)  { animation-delay: 0.06s; }
+    .rand-question:nth-child(3)  { animation-delay: 0.09s; }
+    .rand-question:nth-child(4)  { animation-delay: 0.12s; }
+    .rand-question:nth-child(5)  { animation-delay: 0.15s; }
+    .rand-question:nth-child(6)  { animation-delay: 0.18s; }
+    .rand-question:nth-child(7)  { animation-delay: 0.21s; }
+    .rand-question:nth-child(8)  { animation-delay: 0.24s; }
+    .rand-question:nth-child(9)  { animation-delay: 0.27s; }
+    .rand-question:nth-child(10) { animation-delay: 0.30s; }
+
+    .rand-q-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      padding: 1.25rem 1.5rem;
+    }
+
+    .rand-q-index {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.4rem;
+      font-weight: 900;
+      color: var(--accent);
+      min-width: 2rem;
+      padding-top: 0.1rem;
+      line-height: 1;
+    }
+
+    .rand-q-body { flex: 1; }
+
+    .rand-q-source {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      margin-bottom: 0.3rem;
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .rand-q-source .src-game {
+      color: var(--accent-dim);
+      font-weight: 600;
+    }
+
+    .rand-q-text {
+      font-size: 1rem;
+      line-height: 1.6;
+      color: var(--text);
+    }
+
+    /* Позначка "вже зіграно" */
+    .played-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      background: rgba(201,168,76,0.1);
+      border: 1px solid rgba(201,168,76,0.2);
+      color: var(--accent-dim);
+      border-radius: 4px;
+      font-size: 0.72rem;
+      padding: 0.1rem 0.45rem;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+    }
+
+    /* Режим гри */
+    .game-mode-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      z-index: 500;
+      flex-direction: column;
+    }
+    .game-mode-overlay.active { display: flex; }
+
+    .game-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1.5rem 2rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .game-progress-text {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.1rem;
+      color: var(--text-muted);
+    }
+    .game-progress-text strong { color: var(--accent); font-size: 1.4rem; }
+
+    .game-progress-bar {
+      height: 4px;
+      background: var(--border);
+      position: relative;
+    }
+    .game-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), #e8c46a);
+      transition: width 0.4s ease;
+    }
+
+    .game-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+      max-width: 800px;
+      margin: 0 auto;
+      width: 100%;
+      text-align: center;
+    }
+
+    .game-source {
+      font-size: 0.82rem;
+      color: var(--text-dim);
+      margin-bottom: 1rem;
+    }
+
+    .game-question-text {
+      font-size: 1.4rem;
+      line-height: 1.6;
+      color: var(--text);
+      margin-bottom: 2.5rem;
+      font-weight: 400;
+    }
+
+    .game-answer-block {
+      background: var(--spoiler-bg);
+      border: 1px solid var(--spoiler-border);
+      border-radius: var(--radius-lg);
+      padding: 1.5rem 2rem;
+      width: 100%;
+      max-width: 560px;
+      margin-bottom: 2rem;
+      display: none;
+      animation: fadeSlideIn 0.25s ease;
+    }
+    .game-answer-block.visible { display: block; }
+
+    .game-answer-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--spoiler-text);
+      font-weight: 700;
+      margin-bottom: 0.4rem;
+    }
+    .game-answer-text {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: #9be39b;
+    }
+    .game-comment-text {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      margin-top: 0.75rem;
+      font-style: italic;
+    }
+
+    .game-actions { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; }
+
+    .timer-ring {
+      width: 64px; height: 64px;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .timer-ring svg { transform: rotate(-90deg); }
+    .timer-ring circle {
+      fill: none;
+      stroke-width: 4;
+    }
+    .timer-ring .bg { stroke: var(--border); }
+    .timer-ring .fg {
+      stroke: var(--accent);
+      stroke-linecap: round;
+      transition: stroke-dashoffset 1s linear, stroke 0.4s ease, color 0.4s ease;
+    }
+    .timer-value {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Playfair Display', serif;
+      font-size: 1.05rem;
+      font-weight: 900;
+      color: var(--accent);
+      transition: color 0.4s ease;
+    }
+    @keyframes timerFlash {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50%       { transform: scale(1.15); opacity: 0.6; }
+    }
+
+
+    /* Підказки клавіш */
+    .kbd-hint {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-size: 0.78rem;
+      color: var(--text-dim);
+    }
+
+    kbd {
+      display: inline-block;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-bottom-width: 2px;
+      border-radius: 5px;
+      padding: 0.1rem 0.45rem;
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    /* Responsive */
+    @media (max-width: 800px) {
+      .rand-layout { grid-template-columns: 1fr; }
+      .settings-panel { position: static; }
+      .game-question-text { font-size: 1.1rem; }
+    }
+  </style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="header-inner">
+    <div class="site-logo">ЩДК <span>/ база запитань</span></div>
+    <nav class="nav-links">
+      <a href="index.html">Пакети</a>
+      <a href="randomizer.html" class="active">🎲 Рандомайзер</a>
+    </nav>
+  </div>
+</header>
+
+<main class="main-content">
+  <h1 class="page-title">🎲 <span class="highlight">Рандомайзер</span></h1>
+  <p class="page-subtitle" id="totalPoolText">Завантаження бази…</p>
+
+  <div class="rand-layout">
+
+    <!-- ══ ПАНЕЛЬ НАЛАШТУВАНЬ ══ -->
+    <aside class="settings-panel">
+      <div class="settings-title">⚙️ Налаштування</div>
+
+      <!-- Кількість запитань -->
+      <div class="form-label" style="margin-bottom:0.5rem;">Кількість запитань</div>
+      <div class="count-selector">
+        <button class="count-btn active" onclick="setCount(5,this)">5</button>
+        <button class="count-btn" onclick="setCount(10,this)">10</button>
+        <button class="count-btn" onclick="setCount(20,this)">20</button>
+        <button class="count-btn" onclick="setCount(30,this)">30</button>
+      </div>
+      <div class="custom-count-wrap">
+        <input type="number" class="form-input" id="customCount"
+               placeholder="Інша кількість…" min="1" max="200"
+               oninput="setCustomCount(this.value)" style="font-size:0.9rem; padding:0.5rem 0.85rem;" />
+      </div>
+
+      <!-- Джерела -->
+      <div class="sources-section">
+        <div class="sources-label">
+          Джерела
+          <span>
+            <a href="#" onclick="selectAllSources(true);return false;" style="font-size:0.75rem;">всі</a>
+            &nbsp;/&nbsp;
+            <a href="#" onclick="selectAllSources(false);return false;" style="font-size:0.75rem;">жодного</a>
+          </span>
+        </div>
+        <div class="sources-list" id="sourcesList">
+          <div style="color:var(--text-dim);font-size:0.85rem;padding:0.5rem;">Немає ігор у базі</div>
+        </div>
+      </div>
+
+      <!-- Фільтр по тегах -->
+      <div class="sources-section" id="tagFilterSection" style="display:none;">
+        <div class="sources-label">
+          Тема
+          <a href="#" onclick="clearTagFilter();return false;" id="tagFilterClear" style="font-size:0.75rem;display:none;">скинути</a>
+        </div>
+        <div id="randTagsList" style="display:flex;flex-wrap:wrap;gap:0.35rem;max-height:130px;overflow-y:auto;"></div>
+      </div>
+
+      <!-- Опції -->
+      <div class="options-section">
+        <div class="sources-label" style="margin-bottom:0.6rem;">Опції</div>
+
+        <div class="toggle-row">
+          <span class="toggle-label">Показувати джерело гри</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="optShowSource" checked />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="toggle-row">
+          <span class="toggle-label">Позначати вже зіграні</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="optMarkPlayed" checked />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="toggle-row">
+          <span class="toggle-label">Тільки незіграні</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="optOnlyUnplayed" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Кнопки дій -->
+      <button class="btn btn-primary" onclick="generateRandom()" style="width:100%;justify-content:center;font-size:1rem;padding:0.85rem;">
+        🎲 Генерувати
+      </button>
+
+      <div style="display:flex;gap:0.5rem;margin-top:0.6rem;">
+        <button class="btn btn-secondary" onclick="startGameMode()" style="flex:1;justify-content:center;font-size:0.85rem;">
+          ▶ Режим гри
+        </button>
+        <button class="btn btn-ghost" onclick="clearPlayed()" style="flex:1;justify-content:center;font-size:0.82rem;border:1px solid var(--border);" title="Скинути список зіграних">
+          🔄 Скинути
+        </button>
+      </div>
+
+      <!-- Статистика зіграних -->
+      <div id="playedStats" style="margin-top:1rem;padding:0.75rem;background:var(--bg);border-radius:8px;font-size:0.82rem;color:var(--text-muted);display:none;">
+        Зіграно: <strong id="playedCount" style="color:var(--accent);">0</strong> запитань
+        з <strong id="totalCount" style="color:var(--text);">0</strong>
+      </div>
+    </aside>
+
+    <!-- ══ ОБЛАСТЬ РЕЗУЛЬТАТІВ ══ -->
+    <div class="results-area">
+      <div id="idleState" class="idle-state">
+        <div class="idle-icon">🦉</div>
+        <h3>Готовий до гри</h3>
+        <p>Обери кількість запитань і натисни «Генерувати»</p>
+      </div>
+
+      <div id="resultsContainer" style="display:none;">
+        <div class="results-header">
+          <div class="results-meta">
+            Згенеровано: <strong id="resultCount">0</strong> запитань
+            <span id="resultSources" style="margin-left:0.5rem;font-size:0.82rem;"></span>
+          </div>
+          <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+            <button class="btn btn-ghost" style="border:1px solid var(--border);font-size:0.82rem;" onclick="revealAllAnswers()">👁 Всі відповіді</button>
+            <button class="btn btn-ghost" style="border:1px solid var(--border);font-size:0.82rem;" onclick="collapseAllAnswers()">🙈 Сховати</button>
+            <button class="btn btn-secondary" style="font-size:0.85rem;" onclick="generateRandom()">🎲 Ще раз</button>
+          </div>
+        </div>
+        <div id="questionCards"></div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<!-- ══ РЕЖИМ ГРИ ══ -->
+<div class="game-mode-overlay" id="gameModeOverlay">
+  <div class="game-header">
+    <button class="btn btn-ghost" onclick="exitGameMode()">✕ Вийти</button>
+    <div class="game-progress-text">
+      <strong id="gameCurrentNum">1</strong> / <span id="gameTotalNum">0</span>
+    </div>
+    <div id="gameTimerWrap">
+      <div class="timer-ring">
+        <svg viewBox="0 0 56 56" width="56" height="56">
+          <circle class="bg" cx="28" cy="28" r="22" />
+          <circle class="fg" id="timerCircle" cx="28" cy="28" r="22"
+                  stroke-dasharray="138.2" stroke-dashoffset="0" />
+        </svg>
+        <div class="timer-value" id="timerValue">60</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="game-progress-bar">
+    <div class="game-progress-fill" id="gameProgressFill" style="width:0%"></div>
+  </div>
+
+  <div class="game-body">
+    <div class="game-source" id="gameSource"></div>
+    <div class="game-question-text" id="gameQuestionText"></div>
+
+    <div class="game-answer-block" id="gameAnswerBlock">
+      <div class="game-answer-label">Відповідь</div>
+      <div class="game-answer-text" id="gameAnswerText"></div>
+      <div class="game-comment-text" id="gameCommentText"></div>
+    </div>
+
+    <div class="game-actions">
+      <button class="btn btn-secondary" id="gamePrevBtn" onclick="gameNav(-1)">← Назад</button>
+      <button class="btn btn-primary" id="gameRevealBtn" onclick="revealGameAnswer()">
+        👁 Показати відповідь
+      </button>
+      <button class="btn btn-primary" id="gameNextBtn" onclick="gameNav(1)" style="display:none;">
+        Далі →
+      </button>
+    </div>
+
+    <div style="margin-top:1.5rem;display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;">
+      <span class="kbd-hint"><kbd>Пробіл</kbd> відповідь / далі</span>
+      <span class="kbd-hint"><kbd>←</kbd><kbd>→</kbd> навігація</span>
+      <span class="kbd-hint"><kbd>Esc</kbd> вийти</span>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+// ════════════════════════════════════════════
+//  СХОВИЩЕ
+// ════════════════════════════════════════════
+const PLAYED_KEY = 'qdkk_played';
+
+function loadPlayed() {
+  try { return new Set(JSON.parse(localStorage.getItem(PLAYED_KEY)) || []); }
+  catch { return new Set(); }
+}
+
+function savePlayed(set) {
+  localStorage.setItem(PLAYED_KEY, JSON.stringify([...set]));
+}
+
+// ════════════════════════════════════════════
+//  СТАН
+// ════════════════════════════════════════════
+let allPackages   = [];
+let playedIds     = new Set(); // "pkgId::qNum"
+let selectedCount = 5;
+let currentQuestions = []; // поточна вибірка
+let gameCursor    = 0;
+let timerInterval = null;
+let timerSeconds  = 60;
+
+// ════════════════════════════════════════════
+//  ІНІЦІАЛІЗАЦІЯ
+// ════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', async () => {
+  playedIds = loadPlayed();
+  try {
+    allPackages = await dbLoadPackages();
+  } catch (err) {
+    console.error('Supabase load error:', err);
+    allPackages = [];
+  }
+  renderSources();
+  updateStats();
+});
+
+// ════════════════════════════════════════════
+//  РЕНДЕР ДЖЕРЕЛ (список ігор)
+// ════════════════════════════════════════════
+function renderSources() {
+  const list = document.getElementById('sourcesList');
+  if (allPackages.length === 0) {
+    list.innerHTML = '<div style="color:var(--text-dim);font-size:0.85rem;padding:0.5rem;">Немає ігор у базі — <a href="index.html">додайте пакет</a></div>';
+    document.getElementById('totalPoolText').textContent = 'База порожня — спочатку додайте пакети на головній сторінці';
+    return;
+  }
+
+  list.innerHTML = allPackages.map(pkg => `
+    <label class="source-item">
+      <input type="checkbox" class="src-checkbox" data-id="${pkg.id}" checked />
+      <span class="source-name" title="${escHtml(pkg.title)}">${escHtml(pkg.title)}</span>
+      <span class="source-count">${pkg.questions.length}</span>
+    </label>
+  `).join('');
+
+  updatePoolText();
+  renderRandTags();
+}
+
+// ── Теги в рандомайзері ───────────────────────
+let activeRandTag = null;
+
+function getAllTagsFromPackages(packages) {
+  const all = new Set();
+  for (const pkg of packages) {
+    const data = pkg.tags_data || {};
+    for (const tags of Object.values(data)) {
+      if (Array.isArray(tags)) tags.forEach(t => all.add(t));
+    }
+  }
+  return [...all].sort();
+}
+
+function renderRandTags() {
+  const selectedIds = getSelectedIds();
+  const selected = allPackages.filter(p => selectedIds.includes(p.id));
+  const tags = getAllTagsFromPackages(selected);
+  const section = document.getElementById('tagFilterSection');
+  const list = document.getElementById('randTagsList');
+  if (!section || !list) return;
+
+  section.style.display = tags.length > 0 ? 'block' : 'none';
+  list.innerHTML = tags.map(t => `
+    <span onclick="setRandTagFilter('${t.replace(/'/g, "\'")}')"
+          style="display:inline-block;background:${activeRandTag===t?'var(--accent)':'var(--bg)'};
+                 border:1.5px solid ${activeRandTag===t?'var(--accent)':'var(--border)'};
+                 color:${activeRandTag===t?'#0d1117':'var(--text-muted)'};
+                 border-radius:20px;padding:0.2rem 0.7rem;font-size:0.78rem;font-weight:600;
+                 cursor:pointer;transition:all 0.15s;">
+      ${escHtml(t)}
+    </span>`).join('');
+}
+
+function setRandTagFilter(tag) {
+  activeRandTag = activeRandTag === tag ? null : tag;
+  const clearBtn = document.getElementById('tagFilterClear');
+  if (clearBtn) clearBtn.style.display = activeRandTag ? 'inline' : 'none';
+  renderRandTags();
+}
+
+function clearTagFilter() {
+  activeRandTag = null;
+  const clearBtn = document.getElementById('tagFilterClear');
+  if (clearBtn) clearBtn.style.display = 'none';
+  renderRandTags();
+}
+
+function getSelectedIds() {
+  return [...document.querySelectorAll('.src-checkbox:checked')].map(el => el.dataset.id);
+}
+
+function selectAllSources(state) {
+  document.querySelectorAll('.src-checkbox').forEach(el => el.checked = state);
+  updatePoolText();
+}
+
+function updatePoolText() {
+  const selectedIds = getSelectedIds();
+  const total = allPackages
+    .filter(p => selectedIds.includes(p.id))
+    .reduce((s, p) => s + p.questions.length, 0);
+  document.getElementById('totalPoolText').textContent =
+    `Доступно ${total} запитань з ${selectedIds.length} ігор`;
+}
+
+document.addEventListener('change', e => {
+  if (e.target.classList.contains('src-checkbox')) {
+    updatePoolText();
+    renderRandTags();
+  }
+});
+
+// ════════════════════════════════════════════
+//  ЛІЧИЛЬНИК
+// ════════════════════════════════════════════
+function setCount(n, btn) {
+  selectedCount = n;
+  document.querySelectorAll('.count-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  document.getElementById('customCount').value = '';
+}
+
+function setCustomCount(val) {
+  const n = parseInt(val);
+  if (n > 0) {
+    selectedCount = n;
+    document.querySelectorAll('.count-btn').forEach(b => b.classList.remove('active'));
+  }
+}
+
+// ════════════════════════════════════════════
+//  ГЕНЕРАЦІЯ
+// ════════════════════════════════════════════
+function buildPool() {
+  const selectedIds  = getSelectedIds();
+  const onlyUnplayed = document.getElementById('optOnlyUnplayed').checked;
+
+  const pool = [];
+  for (const pkg of allPackages) {
+    if (!selectedIds.includes(pkg.id)) continue;
+    for (const q of pkg.questions) {
+      const uid = `${pkg.id}::${q.number}`;
+      if (onlyUnplayed && playedIds.has(uid)) continue;
+      // Фільтр по тегу
+      if (activeRandTag) {
+        const qTags = (pkg.tags_data || {})[q.number] || [];
+        if (!qTags.includes(activeRandTag)) continue;
+      }
+      pool.push({ ...q, _pkgId: pkg.id, _pkgTitle: pkg.title, _uid: uid, _tags: (pkg.tags_data||{})[q.number]||[] });
+    }
+  }
+  return pool;
+}
+
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function generateRandom() {
+  const pool = buildPool();
+  if (pool.length === 0) {
+    showToast('Немає доступних запитань. Перевірте фільтри.', 'error');
+    return;
+  }
+
+  const take = Math.min(selectedCount, pool.length);
+  currentQuestions = shuffle([...pool]).slice(0, take);
+
+  renderResults();
+  document.getElementById('idleState').style.display   = 'none';
+  document.getElementById('resultsContainer').style.display = 'block';
+}
+
+// ════════════════════════════════════════════
+//  РЕНДЕР РЕЗУЛЬТАТІВ
+// ════════════════════════════════════════════
+function renderResults() {
+  const showSource = document.getElementById('optShowSource').checked;
+  const markPlayed = document.getElementById('optMarkPlayed').checked;
+
+  document.getElementById('resultCount').textContent = currentQuestions.length;
+
+  // Джерела в рядку
+  const gameSet = new Set(currentQuestions.map(q => q._pkgTitle));
+  document.getElementById('resultSources').textContent =
+    `(${[...gameSet].map(t => t.length > 30 ? t.substring(0,28)+'…' : t).join(', ')})`;
+
+  const cards = document.getElementById('questionCards');
+  cards.innerHTML = currentQuestions.map((q, idx) => {
+    const isPlayed = markPlayed && playedIds.has(q._uid);
+    const spoilerId = `rs_${idx}`;
+    const hasAnswer = q.answer || q.comment;
+    return `
+      <div class="rand-question" id="rq_${idx}">
+        <div class="rand-q-header">
+          <div class="rand-q-index">${idx + 1}</div>
+          <div class="rand-q-body">
+            ${showSource ? `
+              <div class="rand-q-source">
+                <span class="src-game">${escHtml(q._pkgTitle)}</span>
+                ${q.topic ? `<span>· ${escHtml(q.topic)}</span>` : ''}
+                ${(q._tags||[]).map(t => `<span style="background:rgba(201,168,76,0.12);color:var(--accent-dim);border:1px solid rgba(201,168,76,0.2);border-radius:10px;padding:0.05rem 0.45rem;font-size:0.72rem;font-weight:600;">${escHtml(t)}</span>`).join('')}
+                ${isPlayed ? `<span class="played-badge">✓ зіграно</span>` : ''}
+              </div>` : ''}
+            <div class="rand-q-text">${escHtml(q.question)}</div>
+          </div>
+        </div>
+        ${hasAnswer ? `
+          <button class="spoiler-toggle" id="stog_${idx}" onclick="toggleRandSpoiler(${idx})">
+            <span class="arrow">▶</span> Показати відповідь
+          </button>
+          <div class="spoiler-content" id="${spoilerId}">
+            <div class="answer-block">
+              ${q.answer ? `<div class="answer-label">Відповідь</div><div class="answer-text">${escHtml(q.answer)}</div>` : ''}
+              ${q.comment ? `<div class="comment-label" style="margin-top:0.6rem;">Коментар</div><div class="comment-text">${escHtml(q.comment)}</div>` : ''}
+            </div>
+          </div>` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+function toggleRandSpoiler(idx) {
+  const spoiler = document.getElementById(`rs_${idx}`);
+  const btn     = document.getElementById(`stog_${idx}`);
+  const open    = spoiler.classList.contains('visible');
+  spoiler.classList.toggle('visible', !open);
+  btn.classList.toggle('open', !open);
+  btn.innerHTML = `<span class="arrow">▶</span> ${open ? 'Показати відповідь' : 'Сховати відповідь'}`;
+
+  // Позначаємо як зігране при першому відкритті відповіді
+  if (!open && document.getElementById('optMarkPlayed').checked) {
+    const q = currentQuestions[idx];
+    if (q) { playedIds.add(q._uid); savePlayed(playedIds); updateStats(); }
+  }
+}
+
+function revealAllAnswers() {
+  currentQuestions.forEach((_, i) => {
+    const s = document.getElementById(`rs_${i}`);
+    const b = document.getElementById(`stog_${i}`);
+    if (s && !s.classList.contains('visible')) {
+      s.classList.add('visible');
+      b.classList.add('open');
+      b.innerHTML = `<span class="arrow">▶</span> Сховати відповідь`;
+      if (document.getElementById('optMarkPlayed').checked) {
+        playedIds.add(currentQuestions[i]._uid);
+      }
+    }
+  });
+  savePlayed(playedIds);
+  updateStats();
+}
+
+function collapseAllAnswers() {
+  currentQuestions.forEach((_, i) => {
+    const s = document.getElementById(`rs_${i}`);
+    const b = document.getElementById(`stog_${i}`);
+    if (s) {
+      s.classList.remove('visible');
+      b.classList.remove('open');
+      b.innerHTML = `<span class="arrow">▶</span> Показати відповідь`;
+    }
+  });
+}
+
+// ════════════════════════════════════════════
+//  СТАТИСТИКА
+// ════════════════════════════════════════════
+function updateStats() {
+  const total = allPackages.reduce((s, p) => s + p.questions.length, 0);
+  document.getElementById('playedCount').textContent = playedIds.size;
+  document.getElementById('totalCount').textContent  = total;
+  const wrap = document.getElementById('playedStats');
+  wrap.style.display = (total > 0 || playedIds.size > 0) ? 'block' : 'none';
+}
+
+function clearPlayed() {
+  if (!confirm('Скинути список зіграних запитань?')) return;
+  playedIds.clear();
+  savePlayed(playedIds);
+  updateStats();
+  if (currentQuestions.length > 0) renderResults();
+  showToast('Список зіграних скинуто', 'info');
+}
+
+// ════════════════════════════════════════════
+//  РЕЖИМ ГРИ
+// ════════════════════════════════════════════
+const TIMER_DURATION = 60; // секунд
+
+function startGameMode() {
+  if (currentQuestions.length === 0) {
+    generateRandom();
+    if (currentQuestions.length === 0) return;
+  }
+  gameCursor = 0;
+  document.getElementById('gameModeOverlay').classList.add('active');
+  document.getElementById('gameTotalNum').textContent = currentQuestions.length;
+  showGameQuestion();
+}
+
+function exitGameMode() {
+  document.getElementById('gameModeOverlay').classList.remove('active');
+  stopTimer();
+}
+
+function showGameQuestion() {
+  const q = currentQuestions[gameCursor];
+  if (!q) return;
+
+  const showSource = document.getElementById('optShowSource').checked;
+
+  document.getElementById('gameCurrentNum').textContent = gameCursor + 1;
+  document.getElementById('gameProgressFill').style.width =
+    ((gameCursor + 1) / currentQuestions.length * 100) + '%';
+
+  document.getElementById('gameSource').textContent =
+    showSource ? `${q._pkgTitle}${q.topic ? ' · ' + q.topic : ''}` : '';
+
+  document.getElementById('gameQuestionText').textContent = q.question;
+  document.getElementById('gameAnswerBlock').classList.remove('visible');
+  document.getElementById('gameAnswerText').textContent  = q.answer  || '—';
+  document.getElementById('gameCommentText').textContent = q.comment || '';
+  document.getElementById('gameCommentText').style.display = q.comment ? 'block' : 'none';
+
+  // Кнопки
+  document.getElementById('gamePrevBtn').style.visibility =
+    gameCursor === 0 ? 'hidden' : 'visible';
+  document.getElementById('gameRevealBtn').style.display = 'inline-flex';
+  document.getElementById('gameNextBtn').style.display   = 'none';
+
+  // Запускаємо таймер
+  startTimer();
+}
+
+function revealGameAnswer() {
+  stopTimer();
+  document.getElementById('gameAnswerBlock').classList.add('visible');
+  document.getElementById('gameRevealBtn').style.display = 'none';
+  document.getElementById('gameNextBtn').style.display   = 'inline-flex';
+
+  // Позначаємо як зігране
+  const q = currentQuestions[gameCursor];
+  if (q && document.getElementById('optMarkPlayed').checked) {
+    playedIds.add(q._uid);
+    savePlayed(playedIds);
+    updateStats();
+  }
+
+  // Останнє запитання
+  if (gameCursor === currentQuestions.length - 1) {
+    document.getElementById('gameNextBtn').textContent = '✓ Завершити';
+  }
+}
+
+function gameNav(dir) {
+  if (dir === 1 && gameCursor === currentQuestions.length - 1) {
+    exitGameMode();
+    showToast(`Гру завершено! Зіграно ${currentQuestions.length} запитань`, 'success');
+    return;
+  }
+  gameCursor = Math.max(0, Math.min(currentQuestions.length - 1, gameCursor + dir));
+  showGameQuestion();
+}
+
+// ── Таймер ────────────────────────────────────
+function startTimer() {
+  stopTimer();
+  timerSeconds = TIMER_DURATION;
+  updateTimerUI(timerSeconds);
+  setTimerColor('normal');
+
+  timerInterval = setInterval(() => {
+    timerSeconds--;
+
+    if (timerSeconds <= 0) {
+      stopTimer();
+      timerSeconds = 0;
+      updateTimerUI(0);
+      setTimerColor('expired');
+      // Автоматично відкриваємо відповідь коли час вийшов
+      if (document.getElementById('gameRevealBtn').style.display !== 'none') {
+        // Невеликий flash щоб гравець зрозумів що час вийшов
+        flashTimer();
+        setTimeout(() => revealGameAnswer(), 600);
+      }
+      return;
+    }
+
+    updateTimerUI(timerSeconds);
+
+    // Зміна кольору коли лишається мало часу
+    if (timerSeconds <= 10) setTimerColor('danger');
+    else if (timerSeconds <= 20) setTimerColor('warning');
+    else setTimerColor('normal');
+
+  }, 1000);
+}
+
+function stopTimer() {
+  clearInterval(timerInterval);
+}
+
+function updateTimerUI(seconds) {
+  const circle = document.getElementById('timerCircle');
+  const value  = document.getElementById('timerValue');
+  if (!circle || !value) return;
+
+  // Circumference = 2 * π * r = 2 * 3.14159 * 22 ≈ 138.2
+  const circumference = 138.2;
+  const progress = seconds / TIMER_DURATION;
+  const offset = circumference * (1 - progress);
+
+  circle.style.strokeDashoffset = offset;
+  value.textContent = seconds;
+}
+
+function setTimerColor(state) {
+  const circle = document.getElementById('timerCircle');
+  const value  = document.getElementById('timerValue');
+  if (!circle || !value) return;
+
+  const colors = {
+    normal:  { stroke: 'var(--accent)',  text: 'var(--accent)' },
+    warning: { stroke: '#e8a020',        text: '#e8a020' },
+    danger:  { stroke: 'var(--danger)',  text: 'var(--danger)' },
+    expired: { stroke: 'var(--border)',  text: 'var(--text-dim)' },
+  };
+  const c = colors[state] || colors.normal;
+  circle.style.stroke = c.stroke;
+  value.style.color   = c.text;
+}
+
+function flashTimer() {
+  const ring = document.querySelector('.timer-ring');
+  if (!ring) return;
+  ring.style.animation = 'timerFlash 0.3s ease 2';
+  setTimeout(() => ring.style.animation = '', 700);
+}
+
+// ════════════════════════════════════════════
+//  УТИЛІТИ
+// ════════════════════════════════════════════
+function escHtml(str) {
+  return String(str || '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showToast(text, type = 'info') {
+  const icons = { success: '✅', error: '❌', info: 'ℹ️' };
+  const container = document.getElementById('toastContainer');
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.innerHTML = `<span>${icons[type]}</span><span>${text}</span>`;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
+}
+
+// ════════════════════════════════════════════
+//  КЛАВІАТУРНІ СКОРОЧЕННЯ (тільки в режимі гри)
+// ════════════════════════════════════════════
+document.addEventListener('keydown', (e) => {
+  const overlay = document.getElementById('gameModeOverlay');
+  if (!overlay.classList.contains('active')) return;
+
+  // Не реагуємо якщо фокус на полі вводу
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+  switch (e.key) {
+    case ' ':
+    case 'Enter':
+      e.preventDefault();
+      // Пробіл/Enter — відкрити відповідь або перейти далі
+      if (document.getElementById('gameRevealBtn').style.display !== 'none') {
+        revealGameAnswer();
+      } else if (document.getElementById('gameNextBtn').style.display !== 'none') {
+        gameNav(1);
+      }
+      break;
+
+    case 'ArrowRight':
+    case 'ArrowDown':
+      e.preventDefault();
+      // Стрілка вправо/вниз — наступне запитання (тільки якщо відповідь вже відкрита)
+      if (document.getElementById('gameNextBtn').style.display !== 'none') {
+        gameNav(1);
+      }
+      break;
+
+    case 'ArrowLeft':
+    case 'ArrowUp':
+      e.preventDefault();
+      // Стрілка вліво/вгору — попереднє запитання
+      gameNav(-1);
+      break;
+
+    case 'Escape':
+      // Escape — вийти з режиму гри
+      exitGameMode();
+      break;
+  }
+});
+</script>
+
+</body>
+</html>
