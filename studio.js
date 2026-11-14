@@ -20,7 +20,7 @@ const SECTORS = 13;
 const SESSION_KEY = 'qdkk_studio_session';
 const PREFS_KEY = 'qdkk_studio_prefs';
 const PLAYED_KEY = 'qdkk_played';
-const SPIN_MS = { short: 2600, standard: 4200, cinematic: 6200 };
+const SPIN_MS = { short: 2600, standard: 4200, cinematic: 6200, long: 10000 }; // long = довжина звуку дзиґи
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -72,7 +72,7 @@ function deepMerge(base, over) {
 // ════════════════════════════════════════════
 const DEFAULT_PREFS = {
   timerDuration: 60,
-  spinSpeed: 'standard',
+  spinSpeed: 'long',
   skipSpin: false,
   autoReveal: true,
   showSource: true,
@@ -83,6 +83,8 @@ const DEFAULT_PREFS = {
   setup: { format: 'classic', target: 6, rounds: 12, onlyUnplayed: true, markPlayed: true, packageIds: null, tags: [] },
 };
 let prefs = deepMerge(DEFAULT_PREFS, lsGet(PREFS_KEY, {}));
+// v2: дзиґа за замовчуванням крутиться 10 с — рівно стільки, скільки триває її звук
+if ((prefs.v || 1) < 2) { prefs.spinSpeed = 'long'; prefs.v = 2; }
 const savePrefs = () => lsSet(PREFS_KEY, prefs);
 
 // ════════════════════════════════════════════
@@ -179,6 +181,7 @@ const Repo = {
 // ════════════════════════════════════════════
 const Sound = {
   ctx: null, master: null, sfx: null, amb: null, ambNodes: null, whirr: null, _noise: null, lastClick: 0,
+  spinAudio: null, spinFailed: false, spinPlaying: false, spinFadeIv: 0,
 
   ensure() {
     if (!this.ctx) {
@@ -314,6 +317,58 @@ const Sound = {
         this.tone(130.81, 3.2, { vol: 0.08, delay: 0.64, attack: 0.3 });
         break;
     }
+  },
+  // ---- Записаний звук дзиґи (assets/studio/spin.mp3, 10 с) ----
+  // Звичайний <audio>, а не fetch+WebAudio: так звук працює і на GitHub Pages,
+  // і коли studio.html відкрито просто з диска (file://), де fetch заборонений.
+  initSpinAudio() {
+    try {
+      const a = new Audio();
+      a.preload = 'auto';
+      if ('preservesPitch' in a) a.preservesPitch = false;
+      else if ('webkitPreservesPitch' in a) a.webkitPreservesPitch = false;
+      a.addEventListener('error', () => {
+        this.spinFailed = true;
+        console.warn('Звук дзиґи не завантажився (assets/studio/spin.mp3) — грає синтезований.');
+      });
+      a.src = 'assets/studio/spin.mp3';
+      a.load();
+      this.spinAudio = a;
+    } catch { this.spinFailed = true; }
+  },
+  spinVol(k) { const A = prefs.audio; return A.muted ? 0 : clamp(A.master * A.sfx * k, 0, 1); },
+  /** true — грає запис (або звук вимкнено); false — треба синтезований запасний звук. */
+  spinStart() {
+    if (prefs.audio.muted) return true;
+    const a = this.spinAudio;
+    if (!a || this.spinFailed) return false;
+    clearInterval(this.spinFadeIv);
+    try { a.currentTime = 0; } catch {}
+    a.playbackRate = 1;
+    a.volume = this.spinVol(0.9);
+    const p = a.play();
+    if (p && p.catch) p.catch((e) => console.warn('Не вдалося відтворити звук дзиґи:', e));
+    this.spinPlaying = true;
+    return true;
+  },
+  spinUpdate(v) {
+    if (!this.spinPlaying) return;
+    const a = this.spinAudio;
+    // на сповільненні звук трохи нижчає й тихшає — як справжня дзиґа
+    const rate = +(0.84 + 0.2 * v).toFixed(2);
+    if (Math.abs(a.playbackRate - rate) > 0.015) a.playbackRate = rate;
+    a.volume = this.spinVol(0.4 + 0.5 * Math.min(1, v * 1.8));
+  },
+  spinStop(fade = 0.4) {
+    if (!this.spinPlaying) return;
+    this.spinPlaying = false;
+    const a = this.spinAudio, v0 = a.volume, t0 = performance.now();
+    clearInterval(this.spinFadeIv);
+    this.spinFadeIv = setInterval(() => {
+      const k = 1 - (performance.now() - t0) / (fade * 1000);
+      if (k <= 0) { clearInterval(this.spinFadeIv); a.pause(); return; }
+      a.volume = Math.max(0, v0 * k);
+    }, 30);
   },
   whirrStart() {
     if (!this.on) return;
@@ -627,8 +682,8 @@ const Spinner = {
         const r = t < ramp ? (t / ramp) * (t / ramp) * (3 - 2 * (t / ramp)) : 1;
         return r * (1 - Math.pow(1 - t, 3.1));
       };
-      Sound.play('launch');
-      Sound.whirrStart();
+      const sample = Sound.spinStart();
+      if (!sample) { Sound.play('launch'); Sound.whirrStart(); }
       const frame = (now) => {
         const t = clamp((now - t0) / ms, 0, 1);
         const a = base + total * ease(t);
@@ -637,8 +692,8 @@ const Spinner = {
         this.angle = a;
         this.apply(a, v, now);
         const sec = Math.round(a / step);
-        if (sec !== lastSector) { lastSector = sec; if (v < 0.6) Sound.play('click'); }
-        Sound.whirrUpdate(v);
+        if (sec !== lastSector) { lastSector = sec; if (v < (sample ? 0.3 : 0.6)) Sound.play('click'); }
+        if (sample) Sound.spinUpdate(v); else Sound.whirrUpdate(v);
         lastA = a; lastT = now;
         if (t < 1) this.raf = requestAnimationFrame(frame);
         else this.finish();
@@ -658,6 +713,7 @@ const Spinner = {
     this.running = false;
     this.setAngle(this.final);
     Sound.whirrStop();
+    Sound.spinStop(0.5);
     if (!prefs.reducedMotion && this.figure.animate) {
       this.figure.animate([
         { transform: 'rotate(1.8deg)' }, { transform: 'rotate(-1.2deg)' }, { transform: 'rotate(0.7deg)' },
@@ -670,7 +726,7 @@ const Spinner = {
   skip() { if (this.running) this.finish(); },
   cancel() {
     cancelAnimationFrame(this.raf); this.raf = 0;
-    if (this.running) { this.running = false; this.resolve = null; Sound.whirrStop(); this.apply(this.angle, 0, 0); }
+    if (this.running) { this.running = false; this.resolve = null; Sound.whirrStop(); Sound.spinStop(0.2); this.apply(this.angle, 0, 0); }
   },
   highlight(sector) {
     for (let i = 0; i < SECTORS; i++) {
@@ -1669,6 +1725,7 @@ function bindGlobal() {
 async function init() {
   applyVisualPrefs();
   Sound.apply();
+  Sound.initSpinAudio();
   buildDecor();
   Spinner.build();
   Timer.set(prefs.timerDuration);
