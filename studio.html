@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Клуб знавців — ЩДК Studio</title>
+  <meta name="theme-color" content="#101827" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700;900&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="studio.css" />
+  <link rel="manifest" href="manifest.json" />
+  <script src="supabase.js"></script>
+</head>
+<body>
+<div id="app" data-screen="intro" data-phase="idle">
+
+  <!-- ═══════════ СЦЕНА (фон клубу) ═══════════ -->
+  <div class="scene" aria-hidden="true">
+    <div class="scene-wall"></div>
+    <div class="scene-wainscot"></div>
+    <div class="scene-rail"></div>
+    <svg class="scene-clock" viewBox="0 0 200 260">
+      <defs>
+        <radialGradient id="clkFace" cx="50%" cy="45%" r="60%">
+          <stop offset="0%" stop-color="#f1e6d0"/><stop offset="100%" stop-color="#cbb995"/>
+        </radialGradient>
+        <linearGradient id="clkBrass" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#e1c58d"/><stop offset="50%" stop-color="#8a6a3c"/><stop offset="100%" stop-color="#c5a46c"/>
+        </linearGradient>
+      </defs>
+      <path d="M40,96 Q40,20 100,14 Q160,20 160,96 L160,236 Q100,252 40,236 Z" fill="#3b2a1d" stroke="url(#clkBrass)" stroke-width="3"/>
+      <circle cx="100" cy="92" r="56" fill="url(#clkBrass)"/>
+      <circle cx="100" cy="92" r="50" fill="url(#clkFace)"/>
+      <g id="clockTicks" stroke="#3b2a1d" stroke-width="2"></g>
+      <line id="clockHour" x1="100" y1="92" x2="100" y2="66" stroke="#2a1d12" stroke-width="4" stroke-linecap="round"/>
+      <line id="clockMin" x1="100" y1="92" x2="100" y2="52" stroke="#2a1d12" stroke-width="2.4" stroke-linecap="round"/>
+      <circle cx="100" cy="92" r="3.5" fill="#2a1d12"/>
+      <rect x="62" y="160" width="76" height="64" rx="6" fill="#20160f" stroke="url(#clkBrass)" stroke-width="1.5"/>
+      <g class="clock-pendulum">
+        <line x1="100" y1="160" x2="100" y2="206" stroke="url(#clkBrass)" stroke-width="2"/>
+        <circle cx="100" cy="210" r="9" fill="url(#clkBrass)"/>
+      </g>
+    </svg>
+    <div class="scene-spot"></div>
+    <div class="scene-glow"></div>
+    <div class="scene-vignette"></div>
+    <div class="scene-dim"></div>
+  </div>
+
+  <!-- ═══════════ ВСТУПНИЙ ЕКРАН ═══════════ -->
+  <section class="screen screen-intro" id="screenIntro" aria-labelledby="introTitle">
+    <div class="intro-inner">
+      <svg class="intro-emblem" viewBox="0 0 200 200" aria-hidden="true">
+        <defs>
+          <linearGradient id="emBrass" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#f1e0b4"/><stop offset="45%" stop-color="#c5a46c"/><stop offset="100%" stop-color="#6e5230"/>
+          </linearGradient>
+        </defs>
+        <circle cx="100" cy="100" r="92" fill="none" stroke="url(#emBrass)" stroke-width="2"/>
+        <circle cx="100" cy="100" r="84" fill="none" stroke="#c5a46c" stroke-opacity=".35" stroke-width="1"/>
+        <g class="emblem-ticks" stroke="#c5a46c" stroke-opacity=".7"></g>
+        <g class="emblem-top">
+          <rect x="96" y="44" width="8" height="34" rx="4" fill="url(#emBrass)"/>
+          <path d="M100,76 C64,80 52,100 54,108 C58,122 84,138 100,160 C116,138 142,122 146,108 C148,100 136,80 100,76 Z" fill="url(#emBrass)"/>
+          <path d="M56,106 Q100,118 144,106" fill="none" stroke="#5a4127" stroke-width="1.5" opacity=".7"/>
+        </g>
+        <circle class="emblem-sweep" cx="100" cy="100" r="92" fill="none" stroke="#f8f2e8" stroke-width="2.5" stroke-dasharray="40 538" stroke-linecap="round"/>
+      </svg>
+      <h1 class="intro-title" id="introTitle">ЩО? ДЕ? КОЛИ?</h1>
+      <div class="intro-sub">Клуб знавців</div>
+      <div class="intro-actions">
+        <button class="btn btn-gold btn-lg" id="btnIntroNew" type="button">Нова гра</button>
+        <button class="btn btn-ghost btn-lg" id="btnIntroResume" type="button" hidden>Продовжити гру</button>
+      </div>
+      <div class="intro-links">
+        <button class="link-btn" type="button" data-open="settings">⚙️ Налаштування</button>
+        <span class="dot">·</span>
+        <button class="link-btn" type="button" data-open="help">⌨️ Клавіші</button>
+        <span class="dot">·</span>
+        <a class="link-btn" href="randomizer.html">🎲 Рандомайзер</a>
+        <span class="dot">·</span>
+        <a class="link-btn" href="index.html">📦 База пакетів</a>
+      </div>
+      <div class="intro-status" id="introStatus">Завантаження бази запитань…</div>
+    </div>
+  </section>
+
+  <!-- ═══════════ НАЛАШТУВАННЯ ГРИ ═══════════ -->
+  <section class="screen screen-setup" id="screenSetup" aria-labelledby="setupTitle">
+    <div class="setup-frame">
+      <header class="setup-head">
+        <div>
+          <div class="eyebrow">Клуб знавців</div>
+          <h2 id="setupTitle">Підготовка до гри</h2>
+        </div>
+        <button class="btn btn-ghost" type="button" id="btnSetupBack">← Назад</button>
+      </header>
+
+      <div class="setup-grid">
+        <!-- Пакети -->
+        <div class="panel setup-packages">
+          <div class="panel-title">
+            <span>Пакети запитань</span>
+            <span class="panel-links">
+              <button class="link-btn" type="button" id="btnPkgAll">усі</button> /
+              <button class="link-btn" type="button" id="btnPkgNone">жодного</button>
+            </span>
+          </div>
+          <input class="field" type="search" id="pkgSearch" placeholder="Пошук пакета…" autocomplete="off" />
+          <div class="pkg-list" id="pkgList" role="group" aria-label="Пакети"></div>
+          <div class="panel-title small" id="tagTitle" hidden>Теми (необов'язково)</div>
+          <div class="tag-list" id="tagList"></div>
+        </div>
+
+        <!-- Формат -->
+        <div class="panel setup-options">
+          <div class="panel-title"><span>Формат гри</span></div>
+          <div class="seg" id="segFormat" role="radiogroup" aria-label="Формат гри">
+            <button type="button" data-val="classic" role="radio">Класика</button>
+            <button type="button" data-val="rounds" role="radio">Фіксовані раунди</button>
+            <button type="button" data-val="unlimited" role="radio">Тренування</button>
+          </div>
+          <div class="opt-row" id="rowTarget">
+            <label for="inpTarget">Гра до</label>
+            <div class="stepper">
+              <button type="button" data-step="target" data-d="-1" aria-label="Менше">−</button>
+              <input class="field" id="inpTarget" type="number" min="1" max="30" value="6" />
+              <button type="button" data-step="target" data-d="1" aria-label="Більше">+</button>
+            </div>
+            <span class="opt-hint">балів</span>
+          </div>
+          <div class="opt-row" id="rowRounds" hidden>
+            <label for="inpRounds">Раундів</label>
+            <div class="chips" id="chipsRounds">
+              <button type="button" data-val="6">6</button>
+              <button type="button" data-val="12">12</button>
+              <button type="button" data-val="18">18</button>
+            </div>
+            <input class="field field-sm" id="inpRounds" type="number" min="1" max="200" value="12" aria-label="Інша кількість раундів" />
+          </div>
+          <p class="opt-note" id="formatNote"></p>
+
+          <div class="panel-title"><span>Час на обговорення</span></div>
+          <div class="chips" id="chipsTimer">
+            <button type="button" data-val="30">30 с</button>
+            <button type="button" data-val="60">60 с</button>
+            <button type="button" data-val="90">90 с</button>
+            <button type="button" data-val="120">120 с</button>
+          </div>
+          <div class="opt-row">
+            <label for="inpTimer">Свій час</label>
+            <input class="field field-sm" id="inpTimer" type="number" min="5" max="900" value="60" />
+            <span class="opt-hint">секунд</span>
+          </div>
+
+          <div class="panel-title"><span>Запитання</span></div>
+          <label class="check"><input type="checkbox" id="optOnlyUnplayed" checked /> <span>Лише незіграні запитання</span></label>
+          <label class="check"><input type="checkbox" id="optMarkPlayed" checked /> <span>Позначати зіграними після показу відповіді</span></label>
+        </div>
+
+        <!-- Підсумок -->
+        <div class="panel setup-summary">
+          <div class="panel-title"><span>Перед стартом</span></div>
+          <dl class="summary" id="summaryList"></dl>
+          <div class="summary-warn" id="summaryWarn" hidden></div>
+          <button class="btn btn-gold btn-lg btn-block" type="button" id="btnStart">Розпочати гру</button>
+          <button class="btn btn-ghost btn-block" type="button" id="btnApplyMid" hidden>Застосувати й повернутися до гри</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ СТУДІЯ ═══════════ -->
+  <section class="screen screen-studio" id="screenStudio" aria-label="Ігрова студія">
+    <header class="st-header">
+      <div class="st-brand">
+        <div class="st-brand-title">ЩО? ДЕ? КОЛИ?</div>
+        <div class="st-brand-sub">Клуб знавців</div>
+      </div>
+
+      <div class="st-score" aria-live="polite">
+        <div class="st-side">
+          <span class="st-side-label">Знавці</span>
+          <span class="st-num" id="scoreExperts">0</span>
+        </div>
+        <span class="st-colon">:</span>
+        <div class="st-side st-side-right">
+          <span class="st-num" id="scoreQuestions">0</span>
+          <span class="st-side-label">Запитання</span>
+        </div>
+      </div>
+
+      <div class="st-right">
+        <div class="st-round">
+          <span class="st-round-label">Раунд</span>
+          <span class="st-round-num" id="roundLabel">01</span>
+        </div>
+        <div class="st-icons">
+          <button class="icon-btn" type="button" id="btnMute" title="Звук (M)" aria-label="Звук">
+            <svg viewBox="0 0 24 24"><path class="ic-speaker" d="M4 9h4l5-4v14l-5-4H4z"/><path class="ic-waves" d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12"/><path class="ic-mute" d="M16 9l5 6M21 9l-5 6"/></svg>
+          </button>
+          <button class="icon-btn" type="button" id="btnFullscreen" title="Повний екран (F)" aria-label="Повний екран">
+            <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+          </button>
+          <button class="icon-btn" type="button" data-open="help" title="Клавіші (?)" aria-label="Клавіші">
+            <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h1M11 10h1M15 10h1M7 14h10"/></svg>
+          </button>
+          <button class="icon-btn" type="button" data-open="settings" title="Налаштування" aria-label="Налаштування">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <div class="st-source-bar" id="sourceBar"></div>
+
+    <main class="st-main">
+      <div class="stage" id="stage">
+        <div class="table-wrap" id="tableWrap">
+          <div class="table-plane">
+            <svg class="table-svg" id="tableSvg" viewBox="-500 -500 1000 1000" aria-hidden="true"></svg>
+          </div>
+          <div class="top-figure" id="topFigure" aria-hidden="true">
+            <svg id="topSvg" viewBox="0 0 240 300"></svg>
+          </div>
+        </div>
+        <div class="announce" id="announce" aria-live="assertive"></div>
+
+        <div class="q-layer" id="qLayer">
+          <article class="q-card" id="qCard" aria-live="polite">
+            <span class="q-corner tl"></span><span class="q-corner tr"></span>
+            <span class="q-corner bl"></span><span class="q-corner br"></span>
+            <header class="q-head">
+              <span class="q-num" id="qNum">Запитання № 1</span>
+              <span class="q-meta" id="qMeta"></span>
+            </header>
+            <div class="q-body" id="qBody"><div class="q-text" id="qText"></div></div>
+            <div class="q-answer-slot" id="qAnswerSlot"></div>
+          </article>
+        </div>
+      </div>
+
+      <aside class="timer-panel" id="timerPanel" aria-label="Таймер">
+        <svg class="hourglass" id="hourglass" viewBox="0 0 200 340" aria-hidden="true">
+          <defs>
+            <linearGradient id="hgBrass" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stop-color="#6e5230"/><stop offset="30%" stop-color="#e1c58d"/>
+              <stop offset="55%" stop-color="#c5a46c"/><stop offset="100%" stop-color="#5a4127"/>
+            </linearGradient>
+            <linearGradient id="hgWood" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#7a5539"/><stop offset="50%" stop-color="#60432e"/><stop offset="100%" stop-color="#3b2819"/>
+            </linearGradient>
+            <linearGradient id="hgSand" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#f0d9a2"/><stop offset="60%" stop-color="#d9b46a"/><stop offset="100%" stop-color="#b08a48"/>
+            </linearGradient>
+            <linearGradient id="hgGlass" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stop-color="#f8f2e8" stop-opacity=".10"/><stop offset="25%" stop-color="#f8f2e8" stop-opacity=".02"/>
+              <stop offset="80%" stop-color="#f8f2e8" stop-opacity=".04"/><stop offset="100%" stop-color="#f8f2e8" stop-opacity=".12"/>
+            </linearGradient>
+            <clipPath id="hgTopClip"><path d="M46,34 C46,104 90,136 96,168 L104,168 C110,136 154,104 154,34 Z"/></clipPath>
+            <clipPath id="hgBotClip"><path d="M96,172 C90,204 46,236 46,306 L154,306 C154,236 110,204 104,172 Z"/></clipPath>
+          </defs>
+          <!-- задня стійка -->
+          <rect x="97" y="28" width="6" height="284" fill="#3b2819" opacity=".6"/>
+          <!-- скло -->
+          <path class="hg-glass" d="M46,34 C46,104 90,136 96,168 L96,172 C90,204 46,236 46,306 L154,306 C154,236 110,204 104,172 L104,168 C110,136 154,104 154,34 Z" fill="url(#hgGlass)"/>
+          <!-- пісок -->
+          <g clip-path="url(#hgTopClip)"><path id="sandTop" fill="url(#hgSand)" d=""/></g>
+          <g clip-path="url(#hgBotClip)"><path id="sandBot" fill="url(#hgSand)" d=""/></g>
+          <line id="sandStream" class="sand-stream" x1="100" y1="166" x2="100" y2="300" stroke="#e8cc8e" stroke-width="1.8"/>
+          <!-- контур скла та відблиски -->
+          <path d="M46,34 C46,104 90,136 96,168 L96,172 C90,204 46,236 46,306 M154,34 C154,104 110,136 104,168 L104,172 C110,204 154,236 154,306" fill="none" stroke="#e1c58d" stroke-opacity=".45" stroke-width="1.6"/>
+          <path d="M56,44 C57,92 78,120 90,146" fill="none" stroke="#f8f2e8" stroke-opacity=".28" stroke-width="3" stroke-linecap="round"/>
+          <path d="M58,296 C59,256 74,226 88,206" fill="none" stroke="#f8f2e8" stroke-opacity=".18" stroke-width="3" stroke-linecap="round"/>
+          <!-- рама -->
+          <rect x="18" y="28" width="9" height="284" rx="3" fill="url(#hgBrass)"/>
+          <rect x="173" y="28" width="9" height="284" rx="3" fill="url(#hgBrass)"/>
+          <rect x="8" y="10" width="184" height="22" rx="5" fill="url(#hgWood)"/>
+          <rect x="8" y="10" width="184" height="4" rx="2" fill="#f8f2e8" opacity=".12"/>
+          <rect x="8" y="308" width="184" height="22" rx="5" fill="url(#hgWood)"/>
+          <rect x="8" y="308" width="184" height="4" rx="2" fill="#f8f2e8" opacity=".12"/>
+          <circle cx="22.5" cy="21" r="4" fill="url(#hgBrass)"/><circle cx="177.5" cy="21" r="4" fill="url(#hgBrass)"/>
+          <circle cx="22.5" cy="319" r="4" fill="url(#hgBrass)"/><circle cx="177.5" cy="319" r="4" fill="url(#hgBrass)"/>
+        </svg>
+        <div class="timer-digits" id="timerDigits">01:00</div>
+        <div class="timer-label" id="timerLabel">Хвилина на обговорення</div>
+        <div class="timer-bar" aria-hidden="true"><div class="timer-bar-fill" id="timerBarFill"></div></div>
+      </aside>
+    </main>
+
+    <footer class="toolbar" id="toolbar">
+      <div class="tb-phase" id="phaseLabel">Готові до раунду</div>
+      <div class="tb-actions" id="tbActions"></div>
+      <button class="icon-btn tb-collapse" type="button" id="btnToolbarToggle" title="Сховати панель (H)" aria-label="Сховати панель ведучого">
+        <svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+    </footer>
+    <div class="toolbar-hotzone" id="toolbarHotzone"></div>
+    <button class="toolbar-peek" type="button" id="btnToolbarPeek" title="Показати панель (H)" aria-label="Показати панель ведучого">
+      <svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg>
+    </button>
+  </section>
+
+  <!-- ═══════════ ФІНАЛ ═══════════ -->
+  <section class="screen screen-final" id="screenFinal" aria-labelledby="finalTitle">
+    <div class="final-rays" aria-hidden="true"></div>
+    <div class="final-inner">
+      <div class="eyebrow">Клуб знавців</div>
+      <h2 class="final-title" id="finalTitle">ГРУ ЗАВЕРШЕНО</h2>
+      <div class="final-winner" id="finalWinner"></div>
+      <div class="final-score" id="finalScore">0 : 0</div>
+      <div class="final-score-labels"><span>Знавці</span><span>Запитання</span></div>
+      <div class="final-stats" id="finalStats"></div>
+      <div class="final-actions">
+        <button class="btn btn-gold btn-lg" type="button" id="btnFinalReplay">Зіграти ще раз</button>
+        <button class="btn btn-ghost btn-lg" type="button" id="btnFinalNew">Нова гра</button>
+        <a class="btn btn-ghost btn-lg" href="index.html">Повернутися до бази</a>
+      </div>
+      <button class="link-btn final-undo" type="button" id="btnFinalUndo" hidden>↶ Скасувати останній бал і повернутися до гри</button>
+    </div>
+  </section>
+
+  <!-- ═══════════ НАЛАШТУВАННЯ (шухляда) ═══════════ -->
+  <div class="drawer-backdrop" id="drawerBackdrop"></div>
+  <aside class="drawer" id="settingsDrawer" aria-label="Налаштування" aria-hidden="true">
+    <header class="drawer-head">
+      <h3>Налаштування</h3>
+      <button class="icon-btn" type="button" data-close="settings" aria-label="Закрити"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </header>
+    <div class="drawer-body">
+      <section class="dsec" id="dsecScore" hidden>
+        <h4>Рахунок (ручне виправлення)</h4>
+        <div class="score-fix">
+          <span>Знавці</span>
+          <div class="stepper"><button type="button" data-fix="experts" data-d="-1">−</button><output id="fixExperts">0</output><button type="button" data-fix="experts" data-d="1">+</button></div>
+        </div>
+        <div class="score-fix">
+          <span>Запитання</span>
+          <div class="stepper"><button type="button" data-fix="questions" data-d="-1">−</button><output id="fixQuestions">0</output><button type="button" data-fix="questions" data-d="1">+</button></div>
+        </div>
+      </section>
+
+      <section class="dsec">
+        <h4>Таймер</h4>
+        <div class="chips" id="dChipsTimer">
+          <button type="button" data-val="30">30 с</button><button type="button" data-val="60">60 с</button>
+          <button type="button" data-val="90">90 с</button><button type="button" data-val="120">120 с</button>
+        </div>
+        <div class="opt-row"><label for="dInpTimer">Свій час</label><input class="field field-sm" id="dInpTimer" type="number" min="5" max="900" /><span class="opt-hint">с</span></div>
+        <p class="opt-note">Новий час діє з наступного запуску таймера.</p>
+      </section>
+
+      <section class="dsec">
+        <h4>Дзиґа</h4>
+        <div class="seg" id="segSpin">
+          <button type="button" data-val="short">Коротко</button>
+          <button type="button" data-val="standard">Стандарт</button>
+          <button type="button" data-val="cinematic">Кіно</button>
+        </div>
+        <label class="check"><input type="checkbox" id="optSkipSpin" /> <span>Пропускати анімацію дзиґи</span></label>
+        <label class="check"><input type="checkbox" id="optAutoReveal" /> <span>Відкривати запитання одразу після зупинки</span></label>
+      </section>
+
+      <section class="dsec">
+        <h4>Показ</h4>
+        <label class="check"><input type="checkbox" id="optShowSource" /> <span>Показувати джерело запитання</span></label>
+        <label class="check"><input type="checkbox" id="optReducedMotion" /> <span>Менше анімації</span></label>
+        <div class="opt-row"><label>Масштаб</label>
+          <div class="seg seg-sm" id="segScale">
+            <button type="button" data-val="0.9">90%</button><button type="button" data-val="1">100%</button>
+            <button type="button" data-val="1.12">112%</button><button type="button" data-val="1.25">125%</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="dsec">
+        <h4>Звук</h4>
+        <label class="check"><input type="checkbox" id="optMute" /> <span>Вимкнути весь звук</span></label>
+        <div class="slider-row"><label for="volMaster">Загальна гучність</label><input type="range" id="volMaster" min="0" max="1" step="0.05" /></div>
+        <div class="slider-row"><label for="volSfx">Ефекти</label><input type="range" id="volSfx" min="0" max="1" step="0.05" /></div>
+        <label class="check"><input type="checkbox" id="optAmbient" /> <span>Атмосфера клубу (фоновий звук)</span></label>
+        <div class="slider-row"><label for="volAmbient">Гучність атмосфери</label><input type="range" id="volAmbient" min="0" max="1" step="0.05" /></div>
+      </section>
+
+      <section class="dsec" id="dsecGame" hidden>
+        <h4>Гра</h4>
+        <button class="btn btn-ghost btn-block" type="button" id="btnChangePkgs">Змінити пакети</button>
+        <button class="btn btn-danger btn-block" type="button" id="btnDrawerEnd">Завершити гру</button>
+        <a class="btn btn-ghost btn-block" href="index.html">До бази пакетів (гра збережеться)</a>
+      </section>
+    </div>
+  </aside>
+
+  <!-- ═══════════ ДОВІДКА ═══════════ -->
+  <div class="modal-backdrop" id="helpModal" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+      <h3 id="helpTitle">Клавіші ведучого</h3>
+      <table class="keys">
+        <tr><td><kbd>S</kbd></td><td>Крутити дзиґу</td></tr>
+        <tr><td><kbd>Пробіл</kbd></td><td>Старт / пауза / продовжити таймер</td></tr>
+        <tr><td><kbd>Enter</kbd></td><td>Показати запитання / відповідь, пропустити анімацію</td></tr>
+        <tr><td><kbd>1</kbd></td><td>Бал знавцям</td></tr>
+        <tr><td><kbd>2</kbd></td><td>Бал запитанням</td></tr>
+        <tr><td><kbd>0</kbd></td><td>Без бала</td></tr>
+        <tr><td><kbd>Z</kbd></td><td>Скасувати останній бал</td></tr>
+        <tr><td><kbd>R</kbd></td><td>Скинути таймер</td></tr>
+        <tr><td><kbd>→</kbd></td><td>Наступний раунд</td></tr>
+        <tr><td><kbd>H</kbd></td><td>Сховати / показати панель ведучого</td></tr>
+        <tr><td><kbd>F</kbd></td><td>Повний екран</td></tr>
+        <tr><td><kbd>M</kbd></td><td>Звук увімк. / вимк.</td></tr>
+        <tr><td><kbd>Esc</kbd></td><td>Закрити меню та вікна</td></tr>
+      </table>
+      <div class="modal-actions"><button class="btn btn-gold" type="button" data-close="help">Зрозуміло</button></div>
+    </div>
+  </div>
+
+  <!-- ═══════════ ДІАЛОГ ═══════════ -->
+  <div class="modal-backdrop" id="dialog" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="dialogTitle">
+      <h3 id="dialogTitle"></h3>
+      <p id="dialogText"></p>
+      <div class="modal-actions" id="dialogActions"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</div>
+
+<script src="studio.js"></script>
+</body>
+</html>
