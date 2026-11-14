@@ -6,6 +6,7 @@
   <title>Рандомайзер — ЩДК</title>
   <link rel="stylesheet" href="styles.css" />
   <script src="supabase.js"></script>
+  <script src="games.js"></script>
   <style>
     /* ── Рандомайзер специфічні стилі ── */
     .rand-layout {
@@ -510,7 +511,12 @@
 </header>
 
 <main class="main-content">
-  <h1 class="page-title">🎲 <span class="highlight">Рандомайзер</span></h1>
+  <h1 class="page-title">🎲 <span class="highlight" id="randTitle">Рандомайзер</span></h1>
+  <div id="gameSwitcher"></div>
+  <div id="svoyaPanel" hidden>
+    <p class="page-subtitle">У «Своїй грі» запитання обирають на табло, тому замість рандомайзера — запуск гри з пакета.</p>
+    <div class="packages-grid" id="svoyaList"></div>
+  </div>
   <p class="page-subtitle" id="totalPoolText">Завантаження бази…</p>
 
   <div class="rand-layout">
@@ -624,8 +630,11 @@
         <button class="btn btn-secondary" onclick="startMarathon()" style="justify-content:center;font-size:0.85rem;">
           🏃 Марафон
         </button>
-        <a class="btn btn-primary" href="studio.html" style="grid-column:1/-1;justify-content:center;font-size:0.9rem;text-decoration:none;">
+        <a class="btn btn-primary" id="studioBtn" href="studio.html" style="grid-column:1/-1;justify-content:center;font-size:0.9rem;text-decoration:none;">
           🎩 Клуб знавців — студія
+        </a>
+        <a class="btn btn-primary" id="pubQuizBtn" href="gluzdo.html" style="grid-column:1/-1;justify-content:center;font-size:0.9rem;text-decoration:none;display:none;">
+          🍺 Паб-квіз ГлуздоГерць (тури й команди)
         </a>
       </div>
       <button class="btn btn-ghost" onclick="clearPlayed()" style="width:100%;justify-content:center;font-size:0.82rem;border:1px solid var(--border);margin-top:0.5rem;" title="Скинути список зіграних">
@@ -750,8 +759,31 @@ let timerSeconds  = 60;
 // ════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', async () => {
   playedIds = loadPlayed();
+  const game = getCurrentGame();
+  mountGameSwitcher(document.getElementById('gameSwitcher'), game, (g) => { location.href = 'randomizer.html?game=' + g; });
+  document.getElementById('randTitle').textContent = game === 'chgk' ? 'Рандомайзер' : 'Рандомайзер · ' + GAMES[game].name;
+  if (game === 'svoya') {
+    document.querySelector('.rand-layout').style.display = 'none';
+    document.getElementById('totalPoolText').style.display = 'none';
+    document.getElementById('svoyaPanel').hidden = false;
+    let list = [];
+    try { list = await dbLoadPackages('svoya'); } catch (err) { console.error(err); }
+    document.getElementById('svoyaList').innerHTML = list.length ? list.map(p => `
+      <div class="package-card" onclick="location.href='${playUrl(p)}'">
+        <div class="package-card-header"><div class="package-title">${escHtml(p.title)}</div></div>
+        <div class="package-meta">${p.tournament ? `<span class="meta-item">🏆 ${escHtml(p.tournament)}</span>` : ''}</div>
+        <div class="package-count">${escHtml(packageSummary(p))}</div>
+        <div style="margin-top:.8rem;display:flex;gap:.5rem;"><a class="btn btn-primary" href="${playUrl(p)}" onclick="event.stopPropagation()">▶ Грати</a>
+        <a class="btn btn-ghost" href="${packageUrl(p)}" onclick="event.stopPropagation()">✏️ Редагувати</a></div>
+      </div>`).join('') : '<div class="empty-state" style="display:block"><div class="empty-icon">🎯</div><h3>Ще немає пакетів</h3><p><a href="index.html?game=svoya">Створіть пакет «Своєї гри» →</a></p></div>';
+    return;
+  }
+  if (game === 'gluzdo') {
+    document.getElementById('studioBtn').style.display = 'none';
+    document.getElementById('pubQuizBtn').style.display = '';
+  }
   try {
-    allPackages = await dbLoadPackages();
+    allPackages = await dbLoadPackages(game);
   } catch (err) {
     console.error('Supabase load error:', err);
     allPackages = [];
@@ -885,6 +917,7 @@ function buildPool() {
   for (const pkg of allPackages) {
     if (!selectedIds.includes(pkg.id)) continue;
     for (const q of pkg.questions) {
+      if (!q.question && !(q.media || []).length) continue; // порожні заготовки (ГлуздоГерць)
       const uid = `${pkg.id}::${q.number}`;
       if (onlyUnplayed && playedIds.has(uid)) continue;
       // Фільтр по тегу

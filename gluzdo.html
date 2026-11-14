@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ГлуздоГерць — паб-квіз</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="play.css" />
+  <script src="supabase.js"></script>
+  <script src="games.js"></script>
+  <style>
+    .score-list { display: flex; flex-direction: column; gap: .45rem; width: min(760px, 100%); max-height: 58vh; overflow-y: auto; }
+    .score-item { display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: center; padding: .55rem .9rem; border-radius: 12px; background: rgba(25, 37, 54, .85); border: 1px solid var(--line); }
+    .score-item b { font-size: 1.1rem; }
+    .stepper { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+    .stepper button { width: 2.4rem; height: 2.4rem; font-size: 1.2rem; color: var(--gold-hi); }
+    .stepper button:hover { background: rgba(225, 197, 141, .12); }
+    .stepper input { width: 4rem; text-align: center; border: 0; background: transparent; font-weight: 700; font-size: 1.15rem; -moz-appearance: textfield; }
+    .stepper input::-webkit-inner-spin-button { -webkit-appearance: none; }
+    .podium { display: flex; gap: 1rem; align-items: flex-end; justify-content: center; margin: .5rem 0 1rem; }
+    .pod { width: clamp(140px, 16vw, 220px); text-align: center; }
+    .pod .bar { border-radius: 14px 14px 4px 4px; background: linear-gradient(180deg, rgba(225, 197, 141, .35), rgba(25, 37, 54, .9)); border: 1px solid var(--line-strong); display: grid; place-items: center; font: 900 2.4rem var(--font-display); color: var(--gold-hi); animation: rise 1s var(--ease) both; transform-origin: bottom; }
+    .pod.p1 .bar { height: 170px; } .pod.p2 .bar { height: 120px; animation-delay: .3s; } .pod.p3 .bar { height: 90px; animation-delay: .5s; }
+    .pod .nm { font: 700 1.2rem var(--font-display); margin-bottom: .2rem; } .pod .pts { color: var(--text-soft); margin-bottom: .4rem; }
+    @keyframes rise { from { transform: scaleY(0); opacity: 0; } to { transform: none; opacity: 1; } }
+    .host-bar { position: fixed; left: 50%; bottom: .9rem; transform: translateX(-50%); z-index: 5; display: flex; gap: .5rem; align-items: center; padding: .5rem .6rem .5rem 1.2rem; border-radius: 999px; border: 1px solid var(--line); background: linear-gradient(180deg, rgba(25, 37, 54, .94), rgba(12, 18, 30, .96)); box-shadow: 0 18px 50px rgba(0, 0, 0, .55); max-width: calc(100vw - 1.6rem); flex-wrap: wrap; justify-content: center; }
+    .host-bar .ph { font-size: .75rem; font-weight: 700; letter-spacing: .2em; text-transform: uppercase; color: var(--gold); }
+    .stage { padding-bottom: 5.5rem; }
+    .qtimer { display: flex; align-items: center; gap: 1rem; width: 100%; }
+    .tour-list { display: flex; flex-wrap: wrap; gap: .5rem; justify-content: center; margin-top: 1rem; }
+    .tour-list span { padding: .3rem .8rem; border-radius: 999px; border: 1px solid var(--line); color: var(--text-soft); font-size: .9rem; }
+    .tour-list span.done { opacity: .45; text-decoration: line-through; }
+    .tour-list span.cur { border-color: var(--gold-hi); color: var(--gold-hi); }
+  </style>
+</head>
+<body>
+<div class="bg"></div>
+<div class="app">
+  <header class="top">
+    <div class="brand">ГлуздоГерць<small>паб-квіз</small></div>
+    <div class="top-mid" id="topMid"></div>
+    <div class="top-icons">
+      <button class="icon-btn" id="btnTable" title="Таблиця (T)" hidden>📊</button>
+      <button class="icon-btn" id="btnFs" title="Повний екран (F)">⛶</button>
+      <a class="icon-btn" href="index.html?game=gluzdo" title="До пакетів">⌂</a>
+    </div>
+  </header>
+
+  <main class="stage">
+    <!-- НАЛАШТУВАННЯ -->
+    <section class="screen" id="sSetup">
+      <div class="setup">
+        <h2>Новий паб-квіз</h2>
+        <div class="panel">
+          <h3>Пакет</h3>
+          <div class="pkg-pick" id="pkgPick"><div class="empty-note">Завантаження…</div></div>
+        </div>
+        <div class="panel">
+          <h3>Команди</h3>
+          <div class="people" id="teamList"></div>
+          <div class="row" style="justify-content:flex-start;">
+            <input class="field" id="teamName" placeholder="Назва команди" style="flex:1;min-width:180px;" />
+            <button class="btn btn-ghost" id="btnAddTeam">+ Додати</button>
+          </div>
+          <div class="label">Таймер на запитання</div>
+          <div class="chips" id="chipsTimer">
+            <button data-v="0">Без таймера</button><button data-v="30">30 с</button><button data-v="60">60 с</button><button data-v="90">90 с</button><button data-v="120">2 хв</button>
+          </div>
+          <div class="label">Відповіді</div>
+          <div class="chips" id="chipsAnswers">
+            <button data-v="tour">Після кожного туру</button><button data-v="each">Одразу після запитання</button>
+          </div>
+          <div class="row" style="margin-top:1.4rem;justify-content:flex-start;">
+            <button class="btn btn-gold btn-lg" id="btnStart">Почати гру</button>
+          </div>
+          <p class="dim" id="setupNote" style="margin-top:.6rem;font-size:.9rem;"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ВСТУП ТУРУ -->
+    <section class="screen" id="sTourIntro">
+      <div class="big-title">
+        <div class="eyebrow" id="tiEyebrow">Тур 1</div>
+        <h1 id="tiName">Розминка</h1>
+        <p id="tiInfo"></p>
+      </div>
+      <div class="tour-list" id="tiList"></div>
+    </section>
+
+    <!-- ЗАПИТАННЯ / ВІДПОВІДІ -->
+    <section class="screen" id="sQuestion">
+      <article class="qcard">
+        <div class="qhead"><span class="t" id="qT"></span><span class="m" id="qM"></span></div>
+        <div class="qtext" id="qText"></div>
+        <div id="qMedia"></div>
+        <div id="qAnswer"></div>
+        <div class="qtimer" id="qTimer" hidden><div class="tbar" id="tbar"><i id="tbarFill"></i></div><span class="tnum" id="tnum"></span></div>
+      </article>
+    </section>
+
+    <!-- КІНЕЦЬ ТУРУ -->
+    <section class="screen" id="sTourEnd">
+      <div class="big-title">
+        <div class="eyebrow" id="teEyebrow"></div>
+        <h1>Здаємо бланки!</h1>
+        <p>Команди, передайте відповіді ведучому</p>
+      </div>
+    </section>
+
+    <!-- ВНЕСЕННЯ БАЛІВ -->
+    <section class="screen" id="sScoring">
+      <div class="big-title" style="margin-bottom:.4rem;"><div class="eyebrow">Бали за тур</div></div>
+      <div class="chips" id="scoreTours" style="justify-content:center;"></div>
+      <div class="score-list" id="scoreList"></div>
+    </section>
+
+    <!-- ТАБЛИЦЯ -->
+    <section class="screen" id="sBoard">
+      <div class="big-title" style="margin-bottom:.3rem;"><div class="eyebrow" id="boardEyebrow">Таблиця після туру 1</div></div>
+      <div id="podium"></div>
+      <div style="width:100%;max-height:62vh;overflow-y:auto;display:flex;justify-content:center;"><table class="board-table" id="boardTable"></table></div>
+    </section>
+  </main>
+
+  <div class="host-bar" id="hostBar" hidden>
+    <span class="ph" id="hostPhase"></span>
+    <span id="hostBtns" class="row"></span>
+  </div>
+</div>
+
+<div class="modal-bg" id="dlg"><div class="modal"><h3 id="dlgT"></h3><p id="dlgP"></p><div class="row" id="dlgB"></div></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+const esc = gEsc;
+const KEY = 'qdkk_gluzdo_session';
+let packages = [];
+let pkg = null, tours = [];
+let S = null; // сесія
+const setup = { pkgId: new URLSearchParams(location.search).get('id'), teams: [], timer: 60, answers: 'tour' };
+try { const p = JSON.parse(localStorage.getItem('qdkk_gluzdo_prefs') || '{}'); Object.assign(setup, { teams: p.teams || [], timer: p.timer ?? 60, answers: p.answers || 'tour' }); } catch {}
+
+function toast(t, ms = 2400) { const el = $('toast'); el.textContent = t; el.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('show'), ms); }
+function dialog(title, text, buttons) {
+  $('dlgT').textContent = title; $('dlgP').textContent = text;
+  $('dlgB').innerHTML = '';
+  buttons.forEach((b) => { const el = document.createElement('button'); el.className = 'btn ' + (b.cls || 'btn-ghost'); el.textContent = b.label; el.onclick = () => { $('dlg').classList.remove('open'); b.run && b.run(); }; $('dlgB').appendChild(el); });
+  $('dlg').classList.add('open');
+}
+function save() { if (S) { S.updatedAt = Date.now(); localStorage.setItem(KEY, JSON.stringify(S)); } }
+function show(id) {
+  document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('active', s.id === id));
+  document.body.classList.toggle('bg-dim', id === 'sQuestion' || id === 'sScoring' || id === 'sBoard');
+}
+
+// ── Звук (простий синтез) ──
+let actx = null;
+function beep(f, d, v = .15, delay = 0) {
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const t = actx.currentTime + delay, o = actx.createOscillator(), g = actx.createGain();
+    o.frequency.value = f; g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(v, t + .01); g.gain.exponentialRampToValueAtTime(.0001, t + d);
+    o.connect(g).connect(actx.destination); o.start(t); o.stop(t + d + .05);
+  } catch {}
+}
+
+// ════════════════════════════════════════════
+//  НАЛАШТУВАННЯ
+// ════════════════════════════════════════════
+async function init() {
+  try { packages = await dbLoadPackages('gluzdo'); } catch (e) { packages = []; $('pkgPick').innerHTML = `<div class="empty-note">Не вдалося завантажити пакети: ${esc(e.message)}</div>`; }
+  renderSetup();
+  const saved = JSON.parse(localStorage.getItem(KEY) || 'null');
+  if (saved && saved.screen !== 'final' && packages.some((p) => p.id === saved.pkgId)) {
+    dialog('Продовжити попередню гру?', `Тур ${saved.tourIdx + 1}, команд: ${saved.teams.length}.`, [
+      { label: 'Почати нову', cls: 'btn-ghost' },
+      { label: 'Продовжити', cls: 'btn-gold', run: () => resume(saved) },
+    ]);
+  }
+  show('sSetup');
+}
+function renderSetup() {
+  if (packages.length) {
+    if (!packages.some((p) => p.id === setup.pkgId)) setup.pkgId = packages[0].id;
+    $('pkgPick').innerHTML = packages.map((p) => `<label><input type="radio" name="pkg" value="${esc(p.id)}" ${p.id === setup.pkgId ? 'checked' : ''} />
+      <span><b>${esc(p.title)}</b><small>${esc([p.tournament, p.date].filter(Boolean).join(' · '))}</small></span><span class="dim">${esc(Gluzdo.summary(p))}</span></label>`).join('');
+  } else if (!$('pkgPick').textContent.includes('Не вдалося')) {
+    $('pkgPick').innerHTML = '<div class="empty-note">Ще немає пакетів ГлуздоГерцю.<br><a href="index.html?game=gluzdo">Створіть пакет у базі →</a></div>';
+  }
+  $('teamList').innerHTML = setup.teams.map((t, i) => `<div class="person"><input class="field" data-team="${i}" value="${esc(t)}" /><button data-del-team="${i}" title="Прибрати">✕</button></div>`).join('') || '<div class="dim">Додайте хоча б дві команди</div>';
+  document.querySelectorAll('#chipsTimer button').forEach((b) => b.classList.toggle('active', Number(b.dataset.v) === setup.timer));
+  document.querySelectorAll('#chipsAnswers button').forEach((b) => b.classList.toggle('active', b.dataset.v === setup.answers));
+  const ok = packages.length && setup.teams.filter((t) => t.trim()).length >= 1;
+  $('btnStart').disabled = !ok;
+  $('setupNote').textContent = ok ? '' : 'Потрібні пакет і принаймні одна команда.';
+}
+$('pkgPick').addEventListener('change', (e) => { if (e.target.name === 'pkg') setup.pkgId = e.target.value; });
+$('btnAddTeam').onclick = () => { const v = $('teamName').value.trim(); if (!v) return; setup.teams.push(v); $('teamName').value = ''; renderSetup(); $('teamName').focus(); };
+$('teamName').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btnAddTeam').click(); });
+$('teamList').addEventListener('input', (e) => { const i = e.target.dataset.team; if (i != null) setup.teams[i] = e.target.value; });
+$('teamList').addEventListener('click', (e) => { const i = e.target.dataset.delTeam; if (i != null) { setup.teams.splice(Number(i), 1); renderSetup(); } });
+$('chipsTimer').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { setup.timer = Number(b.dataset.v); renderSetup(); } });
+$('chipsAnswers').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { setup.answers = b.dataset.v; renderSetup(); } });
+$('btnStart').onclick = () => {
+  const teams = setup.teams.map((t) => t.trim()).filter(Boolean);
+  localStorage.setItem('qdkk_gluzdo_prefs', JSON.stringify({ teams, timer: setup.timer, answers: setup.answers }));
+  pkg = packages.find((p) => p.id === setup.pkgId);
+  tours = Gluzdo.tours(pkg).filter((t) => t.questions.length);
+  if (!tours.length) { toast('У пакеті немає запитань'); return; }
+  S = { v: 1, pkgId: pkg.id, teams, timer: setup.timer, answers: setup.answers, scores: teams.map(() => ({})), tourIdx: 0, qIdx: 0, aIdx: 0, scoreTour: 0, screen: 'tourIntro', shown: false };
+  try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); } catch {}
+  go('tourIntro');
+};
+function resume(saved) {
+  S = saved;
+  pkg = packages.find((p) => p.id === S.pkgId);
+  tours = Gluzdo.tours(pkg).filter((t) => t.questions.length);
+  S.tourIdx = Math.min(S.tourIdx, tours.length - 1);
+  go(S.screen, true);
+}
+
+// ════════════════════════════════════════════
+//  ПЕРЕБІГ ГРИ
+// ════════════════════════════════════════════
+const tour = () => tours[S.tourIdx];
+const total = (i) => Object.values(S.scores[i]).reduce((s, v) => s + (Number(v) || 0), 0);
+function go(screen, restoring) {
+  S.screen = screen;
+  stopTimer();
+  $('hostBar').hidden = false;
+  $('btnTable').hidden = false;
+  const t = tour();
+  $('topMid').innerHTML = `${esc(pkg.title)}<small>Тур ${S.tourIdx + 1} з ${tours.length}</small>`;
+  let btns = [];
+  switch (screen) {
+    case 'tourIntro':
+      $('tiEyebrow').textContent = `Тур ${t.tour}`;
+      $('tiName').textContent = t.name;
+      $('tiInfo').textContent = `${t.questions.length} ${gPlural(t.questions.length, 'запитання', 'запитання', 'запитань')}${S.timer ? ` · ${S.timer} с на кожне` : ''}`;
+      $('tiList').innerHTML = tours.map((x, i) => `<span class="${i < S.tourIdx ? 'done' : i === S.tourIdx ? 'cur' : ''}">${esc(x.name)}</span>`).join('');
+      show('sTourIntro');
+      phase('Вступ туру');
+      btns = [['Почати тур', 'btn-gold', () => { S.qIdx = 0; S.shown = false; go('question'); }, '→']];
+      if (S.tourIdx > 0) btns.unshift(['← Таблиця', 'btn-ghost', () => go('board')]);
+      break;
+    case 'question': {
+      const q = t.questions[S.qIdx];
+      renderQ(q, `${t.name}`, `Запитання ${S.qIdx + 1} з ${t.questions.length}`, S.answers === 'each' && S.shown);
+      show('sQuestion');
+      phase('Запитання');
+      if (S.timer && !restoring && !S.shown) startTimer(S.timer); else $('qTimer').hidden = true;
+      btns = [['←', 'btn-ghost', () => prevQ()]];
+      if (S.timer) btns.push(['Таймер', 'btn-ghost', () => toggleTimer(), 'Пробіл']);
+      if (S.answers === 'each' && !S.shown) btns.push(['Показати відповідь', 'btn-ghost', () => { S.shown = true; go('question', true); }, 'Enter']);
+      btns.push([S.qIdx + 1 < t.questions.length ? 'Наступне' : 'Завершити тур', 'btn-gold', () => nextQ(), '→']);
+      break;
+    }
+    case 'tourEnd':
+      $('teEyebrow').textContent = `Кінець туру ${t.tour} · ${t.name}`;
+      show('sTourEnd'); phase('Бланки');
+      btns = [['←', 'btn-ghost', () => { S.qIdx = t.questions.length - 1; go('question', true); }]];
+      btns.push(S.answers === 'tour' ? ['Показати відповіді', 'btn-gold', () => { S.aIdx = 0; go('answers'); }, '→'] : ['Внести бали', 'btn-gold', () => { S.scoreTour = S.tourIdx; go('scoring'); }, '→']);
+      break;
+    case 'answers': {
+      const q = t.questions[S.aIdx];
+      renderQ(q, `Відповіді · ${t.name}`, `${S.aIdx + 1} з ${t.questions.length}`, true);
+      show('sQuestion'); phase('Відповіді');
+      btns = [['←', 'btn-ghost', () => { if (S.aIdx > 0) { S.aIdx--; go('answers'); } else go('tourEnd'); }],
+        [S.aIdx + 1 < t.questions.length ? 'Наступна відповідь' : 'Внести бали', 'btn-gold', () => { if (S.aIdx + 1 < t.questions.length) { S.aIdx++; go('answers'); } else { S.scoreTour = S.tourIdx; go('scoring'); } }, '→']];
+      break;
+    }
+    case 'scoring':
+      renderScoring(); show('sScoring'); phase('Бали');
+      btns = [['Показати таблицю', 'btn-gold', () => go('board'), '→']];
+      break;
+    case 'board': {
+      const last = S.tourIdx >= tours.length - 1;
+      renderBoard(false); show('sBoard'); phase('Таблиця');
+      btns = [['✎ Бали', 'btn-ghost', () => { S.scoreTour = S.tourIdx; go('scoring'); }]];
+      btns.push(last ? ['Підсумки гри', 'btn-gold', () => go('final'), '→'] : ['Наступний тур', 'btn-gold', () => { S.tourIdx++; go('tourIntro'); }, '→']);
+      break;
+    }
+    case 'final':
+      renderBoard(true); show('sBoard'); phase('Фінал');
+      beep(523, .3); beep(659, .3, .15, .15); beep(784, .6, .15, .3);
+      btns = [['✎ Бали', 'btn-ghost', () => { S.scoreTour = tours.length - 1; S.tourIdx = tours.length - 1; go('scoring'); }], ['Нова гра', 'btn-gold', () => { localStorage.removeItem(KEY); location.reload(); }]];
+      break;
+  }
+  renderHost(btns);
+  save();
+}
+function phase(t) { $('hostPhase').textContent = t; }
+let hostActions = {};
+function renderHost(btns) {
+  hostActions = {};
+  $('hostBtns').innerHTML = btns.map(([label, cls, fn, key], i) => { hostActions[i] = fn; if (key) hostActions[key] = fn; return `<button class="btn ${cls}" data-i="${i}">${esc(label)}${key ? ` <kbd>${esc(key)}</kbd>` : ''}</button>`; }).join('');
+}
+$('hostBtns').addEventListener('click', (e) => { const b = e.target.closest('[data-i]'); if (b) { b.blur(); hostActions[b.dataset.i](); } });
+function nextQ() {
+  const t = tour();
+  if (S.qIdx + 1 < t.questions.length) { S.qIdx++; S.shown = false; go('question'); } else go('tourEnd');
+}
+function prevQ() {
+  if (S.qIdx > 0) { S.qIdx--; S.shown = false; go('question', true); } else go('tourIntro');
+}
+function renderQ(q, title, meta, withAnswer) {
+  $('qT').textContent = title;
+  $('qM').textContent = meta;
+  $('qText').textContent = q.question || '';
+  $('qText').style.fontSize = q.question && q.question.length > 260 ? 'clamp(1.1rem,2.2vw,2.1rem)' : '';
+  $('qMedia').innerHTML = renderMediaHTML(q.media);
+  $('qAnswer').innerHTML = withAnswer ? `<div class="answer"><div class="l">Відповідь</div><div class="a">${esc(q.answer || '—')}</div>${q.comment ? `<div class="c">${esc(q.comment)}</div>` : ''}</div>` : '';
+}
+
+// ── Таймер ──
+let tm = { left: 0, total: 0, run: false, last: 0, raf: 0 };
+function startTimer(sec) {
+  tm = { left: sec * 1000, total: sec * 1000, run: true, last: performance.now(), raf: 0 };
+  $('qTimer').hidden = false;
+  loop();
+}
+function loop() {
+  cancelAnimationFrame(tm.raf);
+  const step = () => {
+    const now = performance.now();
+    if (tm.run) { tm.left -= now - tm.last; }
+    tm.last = now;
+    const left = Math.max(0, tm.left);
+    $('tbarFill').style.transform = `scaleX(${left / tm.total})`;
+    $('tnum').textContent = Math.ceil(left / 1000) + ' с';
+    $('tbar').className = 'tbar' + (left < 10000 ? ' crit' : left < 20000 ? ' warn' : '');
+    if (left <= 0 && tm.run) { tm.run = false; $('tnum').textContent = 'Час!'; beep(220, .9, .2); beep(165, 1.1, .15, .05); return; }
+    tm.raf = requestAnimationFrame(step);
+  };
+  tm.raf = requestAnimationFrame(step);
+}
+function toggleTimer() { if (!tm.total) return; if (tm.left <= 0) { startTimer(tm.total / 1000); return; } tm.run = !tm.run; tm.last = performance.now(); if (tm.run) loop(); toast(tm.run ? 'Таймер іде' : 'Пауза', 1000); }
+function stopTimer() { cancelAnimationFrame(tm.raf); tm.run = false; }
+
+// ── Бали й таблиця ──
+function renderScoring() {
+  const done = tours.slice(0, Math.max(S.tourIdx, S.scoreTour) + 1);
+  $('scoreTours').innerHTML = done.map((t, i) => `<button data-st="${i}" class="${i === S.scoreTour ? 'active' : ''}">${esc(t.name)}</button>`).join('');
+  const key = tours[S.scoreTour].tour, max = tours[S.scoreTour].questions.length;
+  $('scoreList').innerHTML = S.teams.map((n, i) => `<div class="score-item"><b>${esc(n)}</b>
+    <span class="stepper"><button data-sd="${i}" data-d="-1">−</button><input type="number" min="0" max="${max}" step="0.5" data-sc="${i}" value="${S.scores[i][key] ?? ''}" placeholder="0" /><button data-sd="${i}" data-d="1">+</button></span></div>`).join('');
+}
+$('scoreTours').addEventListener('click', (e) => { const b = e.target.closest('[data-st]'); if (b) { S.scoreTour = Number(b.dataset.st); renderScoring(); save(); } });
+$('scoreList').addEventListener('input', (e) => { const i = e.target.dataset.sc; if (i == null) return; const v = e.target.value === '' ? undefined : Number(e.target.value); const key = tours[S.scoreTour].tour; if (v === undefined) delete S.scores[i][key]; else S.scores[i][key] = v; save(); });
+$('scoreList').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-sd]'); if (!b) return;
+  const i = Number(b.dataset.sd), key = tours[S.scoreTour].tour, max = tours[S.scoreTour].questions.length;
+  S.scores[i][key] = Math.max(0, Math.min(max, (Number(S.scores[i][key]) || 0) + Number(b.dataset.d)));
+  b.parentElement.querySelector('input').value = S.scores[i][key];
+  save();
+});
+function renderBoard(final) {
+  const upto = final ? tours.length : S.tourIdx + 1;
+  const shown = tours.slice(0, upto);
+  const rows = S.teams.map((n, i) => ({ n, i, total: total(i) })).sort((a, b) => b.total - a.total || a.n.localeCompare(b.n, 'uk'));
+  let place = 0, prev = null;
+  rows.forEach((r, k) => { if (r.total !== prev) place = k + 1; r.place = place; prev = r.total; });
+  $('boardEyebrow').textContent = final ? 'Підсумки гри' : `Таблиця після туру ${S.tourIdx + 1} · ${tour().name}`;
+  $('podium').innerHTML = final && rows.length ? `<div class="podium">${[1, 0, 2].filter((k) => rows[k]).map((k) => `<div class="pod p${k + 1}"><div class="nm">${esc(rows[k].n)}</div><div class="pts">${fmt(rows[k].total)} ${gPlural(Math.round(rows[k].total), 'бал', 'бали', 'балів')}</div><div class="bar">${rows[k].place}</div></div>`).join('')}</div>` : '';
+  $('boardTable').innerHTML = `<tr><th>#</th><th>Команда</th>${shown.map((t) => `<th title="${esc(t.name)}">Т${t.tour}</th>`).join('')}<th>Разом</th></tr>` +
+    rows.map((r) => `<tr class="${r.place === 1 && r.total > 0 ? 'lead' : ''}"><td>${r.place}</td><td class="name">${esc(r.n)}</td>${shown.map((t) => `<td>${S.scores[r.i][t.tour] != null ? fmt(S.scores[r.i][t.tour]) : '—'}</td>`).join('')}<td>${fmt(r.total)}</td></tr>`).join('');
+}
+const fmt = (v) => (Math.round(v * 10) / 10).toString().replace('.', ',');
+
+// ── Клавіші, повний екран ──
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT' || e.ctrlKey || e.metaKey || e.altKey || $('dlg').classList.contains('open')) return;
+  if (e.code === 'KeyF') { toggleFs(); return; }
+  if (!S || $('sSetup').classList.contains('active')) return;
+  if (e.code === 'ArrowRight' && hostActions['→']) { e.preventDefault(); hostActions['→'](); }
+  else if (e.code === 'ArrowLeft' && hostActions[0] && $('hostBtns').firstElementChild.textContent.startsWith('←')) { hostActions[0](); }
+  else if (e.code === 'Space' && hostActions['Пробіл']) { e.preventDefault(); hostActions['Пробіл'](); }
+  else if (e.code === 'Enter' && hostActions['Enter']) { e.preventDefault(); hostActions['Enter'](); }
+  else if (e.code === 'KeyT') $('btnTable').click();
+});
+$('btnTable').onclick = () => { if (!S) return; if (S._peek) { S._peek = false; go(S.screen, true); } else if (S.screen !== 'board' && S.screen !== 'final') { stopTimer(); renderBoard(false); show('sBoard'); S._peek = true; toast('Таблиця — натисніть T ще раз, щоб повернутися', 1800); } };
+function toggleFs() { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.().catch(() => toast('Повний екран недоступний')); }
+$('btnFs').onclick = toggleFs;
+init();
+</script>
+</body>
+</html>

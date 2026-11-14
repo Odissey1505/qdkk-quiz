@@ -6,6 +6,7 @@
   <title>ЩО? ДЕ? КОЛИ? — База запитань</title>
   <link rel="stylesheet" href="styles.css" />
   <script src="supabase.js"></script>
+  <script src="games.js"></script>
   <!-- PWA -->
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#c9a84c" />
@@ -14,7 +15,7 @@
   <meta name="apple-mobile-web-app-title" content="ЩДК" />
   <link rel="apple-touch-icon" href="icon-192.png" />
 </head>
-<body>
+<body data-game="chgk">
 
 <!-- ===== ШАПКА ===== -->
 <header class="site-header">
@@ -24,7 +25,7 @@
       <a href="index.html" class="active">Пакети</a>
       <a href="randomizer.html">🎲 Рандомайзер</a>
       <a href="studio.html">🎩 Клуб знавців</a>
-      <a href="#" onclick="openImportModal(); return false;">+ Імпорт</a>
+      <a href="#" class="only-chgk" onclick="openImportModal(); return false;">+ Імпорт</a>
     </nav>
     <button class="hamburger" id="hamburgerBtn" onclick="toggleMenu()" aria-label="Меню">
       <span></span><span></span><span></span>
@@ -51,7 +52,13 @@
 
 <!-- ===== ОСНОВНИЙ КОНТЕНТ ===== -->
 <main class="main-content">
-  <h1 class="page-title">Всі <span class="highlight">пакети</span></h1>
+  <style>
+    body[data-game="chgk"] .only-other { display: none !important; }
+    body:not([data-game="chgk"]) .only-chgk { display: none !important; }
+    .pkg-game-sum { color: var(--text-muted); }
+  </style>
+  <h1 class="page-title">Пакети · <span class="highlight" id="gameTitle">Що? Де? Коли?</span></h1>
+  <div id="gameSwitcher"></div>
   <p class="page-subtitle" id="subtitle">Завантажте PDF або TXT, або додайте пакет вручну</p>
 
   <!-- Статистика -->
@@ -66,11 +73,14 @@
       <span class="search-icon">🔍</span>
       <input type="text" id="searchInput" placeholder="Пошук по запитаннях, відповідях, назвах ігор…" oninput="handleSearch()" />
     </div>
-    <button class="btn btn-primary" onclick="openImportModal()">
+    <button class="btn btn-primary only-chgk" onclick="openImportModal()">
       📄 Імпорт PDF / TXT
     </button>
-    <button class="btn btn-secondary" onclick="openManualModal()">
+    <button class="btn btn-secondary only-chgk" onclick="openManualModal()">
       ✏️ Вручну
+    </button>
+    <button class="btn btn-primary only-other" onclick="openNewGameModal()">
+      ✨ Новий пакет
     </button>
     <select id="sortSelect" onchange="filterPackages()"
             style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);
@@ -96,9 +106,9 @@
 
   <!-- Порожній стан -->
   <div class="empty-state" id="emptyState">
-    <div class="empty-icon">🦉</div>
+    <div class="empty-icon" id="emptyIcon">🦉</div>
     <h3>Ще немає пакетів</h3>
-    <p>Завантажте PDF або TXT з запитаннями або додайте пакет вручну</p>
+    <p id="emptyText">Завантажте PDF або TXT з запитаннями або додайте пакет вручну</p>
   </div>
 </main>
 
@@ -215,6 +225,66 @@
   </div>
 </div>
 
+<!-- ===== МОДАЛЬНЕ ВІКНО: НОВИЙ ПАКЕТ ГЛУЗДОГЕРЦЮ / СВОЄЇ ГРИ ===== -->
+<div class="modal-overlay" id="newGameModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title" id="ngTitle">✨ Новий пакет</h2>
+      <button class="modal-close" onclick="closeNewGameModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Назва пакету *</label>
+        <input type="text" class="form-input" id="ngName" placeholder="Наприклад: Осінній кубок, гра 3" />
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Турнір / подія</label>
+          <input type="text" class="form-input" id="ngTournament" placeholder="Необов'язково" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Дата</label>
+          <input type="date" class="form-input" id="ngDate" />
+        </div>
+      </div>
+
+      <div id="ngGluzdo">
+        <div class="form-label" style="margin-bottom:.6rem;">Структура (порожні запитання, заповните в редакторі)</div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Турів</label><input type="number" class="form-input" id="ngTours" value="8" min="1" max="20" /></div>
+          <div class="form-group"><label class="form-label">Запитань у турі</label><input type="number" class="form-input" id="ngPerTour" value="8" min="1" max="30" /></div>
+        </div>
+      </div>
+
+      <div id="ngSvoya">
+        <div class="form-label" style="margin-bottom:.6rem;">Структура табло (порожні клітинки, заповните в редакторі)</div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Раундів</label><input type="number" class="form-input" id="ngRounds" value="3" min="1" max="6" /></div>
+          <div class="form-group"><label class="form-label">Тем у раунді</label><input type="number" class="form-input" id="ngThemes" value="5" min="1" max="10" /></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Запитань у темі</label><input type="number" class="form-input" id="ngPerTheme" value="5" min="1" max="8" /></div>
+          <div class="form-group"><label class="form-label">Найменша ціна</label><input type="number" class="form-input" id="ngBase" value="100" min="10" step="10" /></div>
+        </div>
+        <label style="display:flex;gap:.5rem;align-items:center;color:var(--text-muted);margin-bottom:1rem;cursor:pointer;">
+          <input type="checkbox" id="ngFinal" checked /> Фінальний раунд зі ставками (3 теми)
+        </label>
+        <p style="font-size:.82rem;color:var(--text-dim);margin-top:-.4rem;margin-bottom:1rem;">У кожному наступному раунді ціни більші: 100–500, 200–1000, 300–1500…</p>
+      </div>
+
+      <details class="form-group">
+        <summary style="cursor:pointer;color:var(--accent);font-weight:600;">📋 Або вставити готовий текст пакета</summary>
+        <textarea class="form-input" id="ngText" rows="9" style="margin-top:.6rem;resize:vertical;font-family:monospace;font-size:.85rem;"></textarea>
+        <pre id="ngHelp" style="white-space:pre-wrap;font-size:.78rem;color:var(--text-dim);margin-top:.5rem;"></pre>
+      </details>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeNewGameModal()">Скасувати</button>
+      <button class="btn btn-primary" onclick="saveNewGamePackage()" id="ngSaveBtn">Створити й відкрити редактор</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== ТОСТИ ===== -->
 <div class="toast-container" id="toastContainer"></div>
 
@@ -223,7 +293,8 @@
 // ============================================
 //  НАЛАШТУВАННЯ PDF.js
 // ============================================
-pdfjsLib.GlobalWorkerOptions.workerSrc =
+// якщо CDN з pdf.js недоступний, решта сторінки все одно працює
+if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc =
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 // ============================================
@@ -266,10 +337,11 @@ function buildPackageCard(pkg) {
   const preview = (pkg.questions || []).slice(0, 3);
   const previewHTML = preview.map(q => `
     <div class="preview-q">
-      <span class="preview-num">${q.number}.</span>
-      <span class="preview-text">${escHtml(q.question)}</span>
+      <span class="preview-num">${q.value ? q.value : q.number}.</span>
+      <span class="preview-text">${escHtml(q.question || '— порожнє —')}</span>
     </div>`).join('');
   const remaining = pkg.questions.length - 3;
+  const isOther = (pkg.game || 'chgk') !== 'chgk';
 
   return `
     <div class="package-card" onclick="openPackage('${pkg.id}')"
@@ -278,7 +350,8 @@ function buildPackageCard(pkg) {
       <div class="package-card-header">
         <div class="package-title">${escHtml(pkg.title)}</div>
         <div class="package-actions" onclick="event.stopPropagation()">
-          <button class="btn btn-ghost" onclick="openPackage('${pkg.id}')" title="Відкрити" style="font-size:0.8rem;padding:0.3rem 0.6rem;">👁</button>
+          ${isOther ? `<a class="btn btn-ghost" href="${playUrl(pkg)}" title="Грати" style="font-size:0.8rem;padding:0.3rem 0.6rem;">▶</a>` : ''}
+          <button class="btn btn-ghost" onclick="openPackage('${pkg.id}')" title="${isOther ? 'Редагувати' : 'Відкрити'}" style="font-size:0.8rem;padding:0.3rem 0.6rem;">${isOther ? '✏️' : '👁'}</button>
           <button class="btn btn-ghost" onclick="deletePackage('${pkg.id}')" title="Видалити" style="font-size:0.8rem;padding:0.3rem 0.6rem;color:var(--danger);">🗑</button>
         </div>
       </div>
@@ -288,7 +361,7 @@ function buildPackageCard(pkg) {
         ${pkg.result ? `<span class="package-tag">${escHtml(pkg.result)}</span>` : ''}
       </div>
       <div class="package-count">
-        <strong>${pkg.questions.length}</strong> запитань
+        ${isOther ? `<span class="pkg-game-sum">${escHtml(packageSummary(pkg))}</span>` : `<strong>${pkg.questions.length}</strong> запитань`}
       </div>
 
       <!-- Попап швидкого перегляду -->
@@ -553,7 +626,8 @@ function clearSearch() {
 }
 
 function openPackage(id) {
-  window.location.href = `questions.html?id=${id}`;
+  const pkg = allPackages.find(p => p.id === id) || { id, game: currentGame };
+  window.location.href = packageUrl(pkg);
 }
 
 async function deletePackage(id) {
@@ -1045,10 +1119,22 @@ function formatDate(d) {
 // ============================================
 //  INIT
 // ============================================
-document.addEventListener('DOMContentLoaded', async () => {
+let currentGame = 'chgk';
+const EMPTY_TEXT = {
+  chgk: ['🦉', 'Завантажте PDF або TXT з запитаннями або додайте пакет вручну'],
+  gluzdo: ['🧠', 'Створіть перший пакет паб-квізу: тури, запитання, картинки й аудіо'],
+  svoya: ['🎯', 'Створіть перший пакет «Своєї гри»: раунди, теми, ціни, кіт у мішку й аукціон'],
+};
+async function loadGamePackages() {
+  document.body.dataset.game = currentGame;
+  document.getElementById('gameTitle').textContent = GAMES[currentGame].name;
+  document.getElementById('emptyIcon').textContent = EMPTY_TEXT[currentGame][0];
+  document.getElementById('emptyText').textContent = EMPTY_TEXT[currentGame][1];
+  document.getElementById('subtitle').textContent = EMPTY_TEXT[currentGame][1];
+  clearSearch();
   showLoadingState(true);
   try {
-    allPackages = await dbLoadPackages();
+    allPackages = await dbLoadPackages(currentGame);
   } catch (err) {
     showToast('Помилка підключення до бази: ' + err.message, 'error');
     allPackages = [];
@@ -1056,7 +1142,63 @@ document.addEventListener('DOMContentLoaded', async () => {
   showLoadingState(false);
   renderPackages(allPackages);
   updateStats();
+}
+document.addEventListener('DOMContentLoaded', async () => {
+  currentGame = getCurrentGame();
+  mountGameSwitcher(document.getElementById('gameSwitcher'), currentGame, (g) => { currentGame = g; loadGamePackages(); });
+  await loadGamePackages();
 });
+
+// ============================================
+//  НОВИЙ ПАКЕТ: ГЛУЗДОГЕРЦЬ / СВОЯ ГРА
+// ============================================
+const NG_HELP = {
+  gluzdo: `Формат тексту:\n# Тур 1: Розминка\n1. Текст запитання\nВідповідь: …\nКоментар: …\nКартинка: https://…   (або Аудіо: / Відео:)\n\n2. Наступне запитання\n…\n# Тур 2: Музичний`,
+  svoya: `Формат тексту:\n# Раунд 1\n## Столиці\n100. Столиця України? | Київ\n200 [кіт]. Текст запитання\nВідповідь: …\nТема кота: Річки\n300 [аукціон]. Текст\nВідповідь: …\nКартинка: https://…\n## Друга тема\n…\n# Фінал\n## Поезія\nТекст фінального запитання\nВідповідь: …`,
+};
+function openNewGameModal() {
+  const g = currentGame;
+  document.getElementById('ngTitle').textContent = `${GAMES[g].icon} Новий пакет — ${GAMES[g].name}`;
+  document.getElementById('ngGluzdo').style.display = g === 'gluzdo' ? '' : 'none';
+  document.getElementById('ngSvoya').style.display = g === 'svoya' ? '' : 'none';
+  document.getElementById('ngHelp').textContent = NG_HELP[g] || '';
+  ['ngName', 'ngTournament', 'ngDate', 'ngText'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('newGameModal').classList.add('active');
+  setTimeout(() => document.getElementById('ngName').focus(), 50);
+}
+function closeNewGameModal() { document.getElementById('newGameModal').classList.remove('active'); }
+async function saveNewGamePackage() {
+  const g = currentGame;
+  const title = document.getElementById('ngName').value.trim();
+  if (!title) { showToast('Введіть назву пакету', 'error'); return; }
+  const num = (id, def, min, max) => Math.min(max, Math.max(min, parseInt(document.getElementById(id).value, 10) || def));
+  const text = document.getElementById('ngText').value.trim();
+  let data;
+  if (text) {
+    if (g === 'gluzdo') { const r = Gluzdo.parseText(text); data = { questions: r.questions, tags_data: { __tours: r.tourNames } }; }
+    else { const r = Svoya.parseText(text); data = { questions: r.questions, tags_data: { __rounds: r.roundNames } }; }
+    if (!data.questions.length) { showToast('У тексті не знайдено жодного запитання — перевірте формат', 'error'); return; }
+  } else if (g === 'gluzdo') {
+    data = Gluzdo.template(num('ngTours', 8, 1, 20), num('ngPerTour', 8, 1, 30));
+  } else {
+    data = Svoya.template({ rounds: num('ngRounds', 3, 1, 6), themes: num('ngThemes', 5, 1, 10), perTheme: num('ngPerTheme', 5, 1, 8), base: num('ngBase', 100, 10, 100000), final: document.getElementById('ngFinal').checked });
+  }
+  const pkg = {
+    id: 'pkg_' + Date.now(), game: g, title,
+    tournament: document.getElementById('ngTournament').value.trim(),
+    date: document.getElementById('ngDate').value,
+    result: '', questions: data.questions, tags_data: data.tags_data,
+  };
+  const btn = document.getElementById('ngSaveBtn');
+  btn.disabled = true;
+  try {
+    await dbInsertPackage(pkg);
+    location.href = packageUrl(pkg);
+  } catch (err) {
+    showToast('Помилка збереження: ' + err.message, 'error');
+    btn.disabled = false;
+  }
+}
 
 function showLoadingState(on) {
   const grid = document.getElementById('packagesGrid');

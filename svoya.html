@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Своя гра</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="play.css" />
+  <script src="supabase.js"></script>
+  <script src="games.js"></script>
+  <style>
+    .stage { padding-bottom: 10rem; }
+    /* Табло */
+    .board { width: min(1500px, 100%); max-height: 100%; display: grid; gap: .5rem; align-content: center; }
+    .b-theme { display: flex; align-items: center; padding: .4rem .9rem; border-radius: 12px; background: linear-gradient(160deg, rgba(34, 53, 75, .92), rgba(16, 24, 39, .95)); border: 1px solid var(--line); font: 700 clamp(.85rem, 1.25vw, 1.25rem) var(--font-display); color: var(--ivory); line-height: 1.2; }
+    .b-cell { border-radius: 12px; border: 1px solid var(--line-strong); background: radial-gradient(ellipse at 50% 30%, rgba(46, 72, 104, .95), rgba(18, 28, 46, .97)); font: 900 clamp(1.3rem, 2.6vw, 2.6rem) var(--font-display); color: var(--gold-hi); text-shadow: 0 2px 10px rgba(0, 0, 0, .5); transition: transform .15s, box-shadow .2s, border-color .2s; display: grid; place-items: center; }
+    .b-cell:hover:not(:disabled) { transform: scale(1.03); border-color: var(--gold-hi); box-shadow: 0 0 24px rgba(225, 197, 141, .35); }
+    .b-cell:disabled { background: rgba(16, 24, 39, .35); border-color: rgba(197, 164, 108, .12); color: transparent; text-shadow: none; cursor: default; }
+    .b-cell.blank { visibility: hidden; }
+    /* Гравці */
+    .players { position: fixed; left: 0; right: 0; bottom: 4.6rem; z-index: 4; display: flex; justify-content: center; gap: .6rem; padding: 0 1rem; flex-wrap: wrap; }
+    .pl { min-width: 150px; padding: .45rem .9rem; border-radius: 14px; border: 1px solid var(--line); background: rgba(16, 24, 39, .88); text-align: center; position: relative; transition: border-color .3s, box-shadow .3s, transform .3s; }
+    .pl.chooser { border-color: var(--gold-hi); box-shadow: 0 0 22px rgba(225, 197, 141, .35); }
+    .pl.chooser::before { content: 'обирає'; position: absolute; top: -.7rem; left: 50%; transform: translateX(-50%); font-size: .62rem; letter-spacing: .2em; text-transform: uppercase; background: var(--gold); color: #1d150c; padding: .05rem .5rem; border-radius: 999px; font-weight: 700; }
+    .pl .n { font-weight: 700; font-size: 1.02rem; cursor: pointer; }
+    .pl .s { font: 900 1.45rem var(--font-display); font-variant-numeric: tabular-nums; cursor: pointer; color: var(--gold-hi); }
+    .pl .s.neg { color: #ef8f97; }
+    .pl.bump { animation: plBump .7s var(--ease); }
+    @keyframes plBump { 30% { transform: scale(1.1); } }
+    /* Судді */
+    .judge { display: flex; flex-wrap: wrap; gap: .5rem; justify-content: center; }
+    .judge .jp { display: flex; gap: .25rem; align-items: center; padding: .25rem .3rem .25rem .8rem; border-radius: 999px; border: 1px solid var(--line); background: rgba(16, 24, 39, .7); }
+    .judge .jp.off { opacity: .35; pointer-events: none; }
+    .judge .jp b { margin-right: .3rem; }
+    .judge .jp .btn { padding: .4rem .7rem; }
+    .host-bar { position: fixed; left: 50%; bottom: .9rem; transform: translateX(-50%); z-index: 5; display: flex; gap: .5rem; align-items: center; padding: .5rem .6rem .5rem 1.2rem; border-radius: 999px; border: 1px solid var(--line); background: linear-gradient(180deg, rgba(25, 37, 54, .94), rgba(12, 18, 30, .96)); box-shadow: 0 18px 50px rgba(0, 0, 0, .55); max-width: calc(100vw - 1.6rem); flex-wrap: wrap; justify-content: center; }
+    .host-bar .ph { font-size: .75rem; font-weight: 700; letter-spacing: .2em; text-transform: uppercase; color: var(--gold); }
+    .special { text-align: center; }
+    .special .icon { font-size: clamp(3rem, 8vw, 6rem); animation: wiggle 1.2s ease-in-out infinite; }
+    @keyframes wiggle { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }
+    .pick-players { display: flex; gap: .6rem; flex-wrap: wrap; justify-content: center; margin-top: 1rem; }
+    .pick-players button { min-width: 140px; }
+    .pick-players button.sel { background: linear-gradient(180deg, var(--gold-hi), var(--gold)); color: #1d150c; border-color: transparent; }
+    .bid-row { display: flex; gap: .6rem; align-items: center; justify-content: center; margin-top: 1rem; flex-wrap: wrap; }
+    .bid-row input { width: 9rem; text-align: center; font: 700 1.4rem var(--font-ui); }
+    .final-themes { display: flex; flex-direction: column; gap: .6rem; width: min(760px, 100%); }
+    .final-themes button { padding: 1rem 1.3rem; border-radius: 14px; border: 1px solid var(--line-strong); background: var(--panel); font: 700 clamp(1.1rem, 2vw, 1.6rem) var(--font-display); color: var(--ivory); transition: opacity .3s, transform .3s; }
+    .final-themes button.gone { opacity: .25; text-decoration: line-through; transform: scale(.97); }
+    .bets { display: flex; flex-direction: column; gap: .5rem; width: min(640px, 100%); }
+    .bets .score-item { display: grid; grid-template-columns: 1fr auto auto; gap: 1rem; align-items: center; padding: .55rem .9rem; border-radius: 12px; background: rgba(25, 37, 54, .85); border: 1px solid var(--line); }
+    .bets input { width: 8rem; text-align: center; font-weight: 700; }
+    .podium { display: flex; gap: 1rem; align-items: flex-end; justify-content: center; margin: .5rem 0 1rem; }
+    .pod { width: clamp(140px, 16vw, 220px); text-align: center; }
+    .pod .bar { border-radius: 14px 14px 4px 4px; background: linear-gradient(180deg, rgba(225, 197, 141, .35), rgba(25, 37, 54, .9)); border: 1px solid var(--line-strong); display: grid; place-items: center; font: 900 2.4rem var(--font-display); color: var(--gold-hi); animation: rise 1s var(--ease) both; transform-origin: bottom; }
+    .pod.p1 .bar { height: 170px; } .pod.p2 .bar { height: 120px; animation-delay: .3s; } .pod.p3 .bar { height: 90px; animation-delay: .5s; }
+    .pod .nm { font: 700 1.2rem var(--font-display); } .pod .pts { color: var(--text-soft); margin-bottom: .4rem; }
+    @keyframes rise { from { transform: scaleY(0); opacity: 0; } to { transform: none; opacity: 1; } }
+    .qtimer { display: flex; align-items: center; gap: 1rem; width: 100%; }
+    .cell-zoom { animation: zoomIn .5s var(--ease); }
+    @keyframes zoomIn { from { transform: scale(.6); opacity: 0; } to { transform: none; opacity: 1; } }
+  </style>
+</head>
+<body>
+<div class="bg"></div>
+<div class="app">
+  <header class="top">
+    <div class="brand">Своя гра<small>ведучий</small></div>
+    <div class="top-mid" id="topMid"></div>
+    <div class="top-icons">
+      <button class="icon-btn" id="btnUndo" title="Скасувати останню зміну балів (Z)" hidden>↶</button>
+      <button class="icon-btn" id="btnFs" title="Повний екран (F)">⛶</button>
+      <a class="icon-btn" href="index.html?game=svoya" title="До пакетів">⌂</a>
+    </div>
+  </header>
+
+  <main class="stage">
+    <section class="screen" id="sSetup">
+      <div class="setup">
+        <h2>Нова «Своя гра»</h2>
+        <div class="panel">
+          <h3>Пакет</h3>
+          <div class="pkg-pick" id="pkgPick"><div class="empty-note">Завантаження…</div></div>
+        </div>
+        <div class="panel">
+          <h3>Гравці</h3>
+          <div class="people" id="playerList"></div>
+          <div class="row" style="justify-content:flex-start;">
+            <input class="field" id="playerName" placeholder="Ім'я гравця або команди" style="flex:1;min-width:180px;" />
+            <button class="btn btn-ghost" id="btnAddPlayer">+ Додати</button>
+          </div>
+          <div class="label">Таймер на відповідь</div>
+          <div class="chips" id="chipsTimer"><button data-v="0">Без таймера</button><button data-v="10">10 с</button><button data-v="15">15 с</button><button data-v="20">20 с</button><button data-v="30">30 с</button></div>
+          <div class="label">Мінус за неправильну відповідь</div>
+          <div class="chips" id="chipsMinus"><button data-v="1">Так</button><button data-v="0">Ні</button></div>
+          <div class="row" style="margin-top:1.4rem;justify-content:flex-start;"><button class="btn btn-gold btn-lg" id="btnStart">Почати гру</button></div>
+          <p class="dim" id="setupNote" style="margin-top:.6rem;font-size:.9rem;"></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="screen" id="sRoundIntro">
+      <div class="big-title"><div class="eyebrow" id="riEyebrow"></div><h1 id="riName"></h1><p id="riInfo"></p></div>
+    </section>
+
+    <section class="screen" id="sBoard"><div class="board" id="board"></div></section>
+
+    <section class="screen" id="sSpecial">
+      <div class="special">
+        <div class="icon" id="spIcon">🐱</div>
+        <div class="big-title"><h1 id="spTitle">Кіт у мішку!</h1><p id="spText"></p></div>
+        <div id="spBody"></div>
+      </div>
+    </section>
+
+    <section class="screen" id="sQuestion">
+      <article class="qcard cell-zoom">
+        <div class="qhead"><span class="t" id="qT"></span><span class="m" id="qM"></span></div>
+        <div class="qtext" id="qText"></div>
+        <div id="qMedia"></div>
+        <div id="qAnswer"></div>
+        <div class="qtimer" id="qTimer" hidden><div class="tbar" id="tbar"><i id="tbarFill"></i></div><span class="tnum" id="tnum"></span></div>
+      </article>
+      <div class="judge" id="judge"></div>
+    </section>
+
+    <section class="screen" id="sFinal">
+      <div class="big-title" style="margin-bottom:.4rem;"><div class="eyebrow" id="fEyebrow">Фінал</div><h1 id="fTitle" style="font-size:clamp(2rem,5vw,4rem);"></h1><p id="fText"></p></div>
+      <div id="fBody" style="width:100%;display:flex;justify-content:center;"></div>
+    </section>
+
+    <section class="screen" id="sResults">
+      <div class="big-title"><div class="eyebrow">Гру завершено</div><h1 id="resWinner"></h1></div>
+      <div id="resPodium"></div>
+    </section>
+  </main>
+
+  <div class="players" id="players" hidden></div>
+  <div class="host-bar" id="hostBar" hidden><span class="ph" id="hostPhase"></span><span id="hostBtns" class="row"></span></div>
+</div>
+
+<div class="modal-bg" id="dlg"><div class="modal"><h3 id="dlgT"></h3><p id="dlgP"></p><div id="dlgX"></div><div class="row" id="dlgB"></div></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+const esc = gEsc;
+const KEY = 'qdkk_svoya_session';
+let packages = [], pkg = null, rounds = [];
+let S = null;
+const setup = { pkgId: new URLSearchParams(location.search).get('id'), players: [], timer: 15, minus: 1 };
+try { const p = JSON.parse(localStorage.getItem('qdkk_svoya_prefs') || '{}'); Object.assign(setup, { players: p.players || [], timer: p.timer ?? 15, minus: p.minus ?? 1 }); } catch {}
+
+function toast(t, ms = 2400) { const el = $('toast'); el.textContent = t; el.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('show'), ms); }
+function dialog(title, text, buttons, extraHTML = '') {
+  $('dlgT').textContent = title; $('dlgP').textContent = text; $('dlgX').innerHTML = extraHTML; $('dlgB').innerHTML = '';
+  buttons.forEach((b) => { const el = document.createElement('button'); el.className = 'btn ' + (b.cls || 'btn-ghost'); el.textContent = b.label; el.onclick = () => { if (b.run && b.run() === false) return; $('dlg').classList.remove('open'); }; $('dlgB').appendChild(el); });
+  $('dlg').classList.add('open');
+}
+function save() { if (S) { S.updatedAt = Date.now(); localStorage.setItem(KEY, JSON.stringify(S)); } }
+function show(id) { document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('active', s.id === id)); document.body.classList.toggle('bg-dim', id !== 'sSetup'); }
+let actx = null;
+function beep(f, d, v = .15, delay = 0) {
+  try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); const t = actx.currentTime + delay, o = actx.createOscillator(), g = actx.createGain();
+    o.frequency.value = f; g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(v, t + .01); g.gain.exponentialRampToValueAtTime(.0001, t + d); o.connect(g).connect(actx.destination); o.start(t); o.stop(t + d + .05); } catch {}
+}
+
+// ════════════════════════════════════════════
+//  НАЛАШТУВАННЯ
+// ════════════════════════════════════════════
+async function init() {
+  try { packages = await dbLoadPackages('svoya'); } catch (e) { packages = []; $('pkgPick').innerHTML = `<div class="empty-note">Не вдалося завантажити пакети: ${esc(e.message)}</div>`; }
+  renderSetup();
+  show('sSetup');
+  const saved = JSON.parse(localStorage.getItem(KEY) || 'null');
+  if (saved && saved.phase !== 'results' && packages.some((p) => p.id === saved.pkgId)) {
+    dialog('Продовжити попередню гру?', saved.players.map((p) => `${p.name}: ${p.score}`).join(' · '), [
+      { label: 'Почати нову' }, { label: 'Продовжити', cls: 'btn-gold', run: () => resume(saved) },
+    ]);
+  }
+}
+function renderSetup() {
+  if (packages.length) {
+    if (!packages.some((p) => p.id === setup.pkgId)) setup.pkgId = packages[0].id;
+    $('pkgPick').innerHTML = packages.map((p) => `<label><input type="radio" name="pkg" value="${esc(p.id)}" ${p.id === setup.pkgId ? 'checked' : ''} />
+      <span><b>${esc(p.title)}</b><small>${esc([p.tournament, p.date].filter(Boolean).join(' · '))}</small></span><span class="dim">${esc(Svoya.summary(p))}</span></label>`).join('');
+  } else if (!$('pkgPick').textContent.includes('Не вдалося')) {
+    $('pkgPick').innerHTML = '<div class="empty-note">Ще немає пакетів «Своєї гри».<br><a href="index.html?game=svoya">Створіть пакет у базі →</a></div>';
+  }
+  $('playerList').innerHTML = setup.players.map((t, i) => `<div class="person"><input class="field" data-pl="${i}" value="${esc(t)}" /><button data-del-pl="${i}" title="Прибрати">✕</button></div>`).join('') || '<div class="dim">Додайте від 1 до 8 гравців</div>';
+  document.querySelectorAll('#chipsTimer button').forEach((b) => b.classList.toggle('active', Number(b.dataset.v) === setup.timer));
+  document.querySelectorAll('#chipsMinus button').forEach((b) => b.classList.toggle('active', Number(b.dataset.v) === setup.minus));
+  const ok = packages.length && setup.players.some((t) => t.trim());
+  $('btnStart').disabled = !ok;
+  $('setupNote').textContent = ok ? '' : 'Потрібні пакет і принаймні один гравець.';
+}
+$('pkgPick').addEventListener('change', (e) => { if (e.target.name === 'pkg') setup.pkgId = e.target.value; });
+$('btnAddPlayer').onclick = () => { const v = $('playerName').value.trim(); if (!v) return; if (setup.players.length >= 8) { toast('Максимум 8 гравців'); return; } setup.players.push(v); $('playerName').value = ''; renderSetup(); $('playerName').focus(); };
+$('playerName').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btnAddPlayer').click(); });
+$('playerList').addEventListener('input', (e) => { const i = e.target.dataset.pl; if (i != null) setup.players[i] = e.target.value; });
+$('playerList').addEventListener('click', (e) => { const i = e.target.dataset.delPl; if (i != null) { setup.players.splice(Number(i), 1); renderSetup(); } });
+$('chipsTimer').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { setup.timer = Number(b.dataset.v); renderSetup(); } });
+$('chipsMinus').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { setup.minus = Number(b.dataset.v); renderSetup(); } });
+$('btnStart').onclick = () => {
+  const players = setup.players.map((t) => t.trim()).filter(Boolean);
+  localStorage.setItem('qdkk_svoya_prefs', JSON.stringify({ players, timer: setup.timer, minus: setup.minus }));
+  pkg = packages.find((p) => p.id === setup.pkgId);
+  rounds = Svoya.rounds(pkg).filter((r) => r.themes.some((t) => t.questions.length));
+  if (!rounds.length) { toast('У пакеті немає запитань'); return; }
+  S = { v: 1, pkgId: pkg.id, players: players.map((name) => ({ name, score: 0 })), timer: setup.timer, minus: setup.minus,
+    roundIdx: 0, played: [], chooser: 0, phase: 'roundIntro', cur: null, history: [], final: null };
+  try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); } catch {}
+  go('roundIntro');
+};
+function resume(saved) {
+  S = saved;
+  pkg = packages.find((p) => p.id === S.pkgId);
+  rounds = Svoya.rounds(pkg).filter((r) => r.themes.some((t) => t.questions.length));
+  // безпечне відновлення: незавершене запитання повертається на табло
+  if (['question', 'cat', 'auction'].includes(S.phase)) { S.phase = 'board'; S.cur = null; }
+  if (S.phase === 'finalQ') S.phase = 'finalBets';
+  go(S.phase);
+}
+
+// ════════════════════════════════════════════
+//  ПЕРЕБІГ
+// ════════════════════════════════════════════
+const round = () => rounds[S.roundIdx];
+const qByNum = (n) => (pkg.questions || []).find((q) => q.number === n);
+const isPlayed = (n) => S.played.includes(n);
+const roundDone = () => round().themes.every((t) => t.questions.every((q) => isPlayed(q.number)));
+let hostActions = {};
+function host(phaseText, btns) {
+  $('hostBar').hidden = false;
+  $('hostPhase').textContent = phaseText;
+  hostActions = {};
+  $('hostBtns').innerHTML = btns.map(([label, cls, fn, key], i) => { hostActions[i] = fn; if (key) hostActions[key] = fn; return `<button class="btn ${cls}" data-i="${i}">${esc(label)}${key ? ` <kbd>${esc(key)}</kbd>` : ''}</button>`; }).join('');
+}
+$('hostBtns').addEventListener('click', (e) => { const b = e.target.closest('[data-i]'); if (b) { b.blur(); hostActions[b.dataset.i](); } });
+
+function go(phase) {
+  S.phase = phase;
+  stopTimer();
+  pauseMedia();
+  const r = round();
+  $('topMid').innerHTML = r ? `${esc(r.name)}<small>${esc(pkg.title)}</small>` : esc(pkg.title);
+  $('btnUndo').hidden = false;
+  renderPlayers();
+  switch (phase) {
+    case 'roundIntro':
+      $('riEyebrow').textContent = r.isFinal ? 'Останній етап' : `Раунд ${S.roundIdx + 1}`;
+      $('riName').textContent = r.name;
+      $('riInfo').textContent = r.isFinal ? 'Гравці прибирають теми, роблять ставки й відповідають письмово' : r.themes.map((t) => t.name).join(' · ');
+      show('sRoundIntro');
+      host('Новий раунд', [[r.isFinal ? 'До фіналу' : 'Відкрити табло', 'btn-gold', () => go(r.isFinal ? 'finalThemes' : 'board'), '→']]);
+      if (!r.isFinal) beep(392, .25, .12), beep(523, .4, .12, .15);
+      break;
+    case 'board': renderBoard(); break;
+    case 'finalThemes': case 'finalBets': case 'finalQ': case 'finalJudge': renderFinal(phase); break;
+    case 'results': renderResults(); break;
+  }
+  save();
+}
+
+// ---- Табло ----
+function renderBoard() {
+  const r = round();
+  const cols = Math.max(...r.themes.map((t) => t.questions.length));
+  const b = $('board');
+  b.style.gridTemplateColumns = `minmax(160px, 1.5fr) repeat(${cols}, 1fr)`;
+  b.style.gridTemplateRows = `repeat(${r.themes.length}, minmax(48px, 150px))`;
+  b.style.height = `min(100%, ${r.themes.length * 158}px)`;
+  b.innerHTML = r.themes.map((t) => `<div class="b-theme">${esc(t.name)}</div>` +
+    Array.from({ length: cols }, (_, i) => { const q = t.questions[i]; return q ? `<button class="b-cell" data-q="${q.number}" ${isPlayed(q.number) ? 'disabled' : ''}>${q.value}</button>` : '<span class="b-cell blank"></span>'; }).join('')).join('');
+  show('sBoard');
+  const last = S.roundIdx >= rounds.length - 1;
+  const nextLabel = last ? 'Підсумки' : rounds[S.roundIdx + 1].isFinal ? 'До фіналу' : 'Наступний раунд';
+  if (roundDone()) host('Раунд завершено', [[nextLabel, 'btn-gold', () => nextRound(), '→']]);
+  else host(`Обирає: ${S.players[S.chooser]?.name || '—'}`, [['Завершити раунд', 'btn-ghost', () => dialog('Завершити раунд?', 'Незіграні запитання залишаться невідкритими.', [{ label: 'Скасувати' }, { label: 'Завершити', cls: 'btn-gold', run: () => nextRound() }])]]);
+}
+$('board').addEventListener('click', (e) => { const b = e.target.closest('[data-q]'); if (b && !b.disabled) openCell(Number(b.dataset.q)); });
+function nextRound() {
+  if (S.roundIdx >= rounds.length - 1) { go('results'); return; }
+  S.roundIdx++;
+  if (round().isFinal) S.final = null;
+  go('roundIntro');
+}
+
+// ---- Клітинка ----
+function openCell(num) {
+  const q = qByNum(num);
+  S.cur = { num, mode: q.type || 'normal', player: null, stake: q.value, tried: [], revealed: false };
+  if (q.type === 'cat') { S.phase = 'cat'; renderCat(); }
+  else if (q.type === 'auction') { S.phase = 'auction'; renderAuction(); }
+  else { S.phase = 'question'; renderQuestion(); }
+  renderPlayers();
+  save();
+}
+function renderCat(step) {
+  const q = qByNum(S.cur.num);
+  $('spIcon').textContent = '🐱';
+  $('spTitle').textContent = 'Кіт у мішку!';
+  const others = S.players.map((p, i) => i).filter((i) => S.players.length === 1 || i !== S.chooser);
+  if (S.cur.player == null) {
+    $('spText').textContent = `${S.players[S.chooser]?.name || 'Гравець'} віддає кота іншому гравцеві`;
+    $('spBody').innerHTML = `<div class="pick-players">${others.map((i) => `<button class="btn btn-ghost" data-cat="${i}">${esc(S.players[i].name)}</button>`).join('')}</div>`;
+    host('Кіт у мішку', [['Скасувати', 'btn-ghost', () => { S.cur = null; go('board'); }]]);
+  } else {
+    S.cur.stake = q.catValue || q.value;
+    $('spText').innerHTML = `Відповідає <b>${esc(S.players[S.cur.player].name)}</b><br>Тема: <b>${esc(q.catTheme || q.theme)}</b> · Ціна: <b>${S.cur.stake}</b>`;
+    $('spBody').innerHTML = '';
+    host('Кіт у мішку', [['Показати запитання', 'btn-gold', () => { S.phase = 'question'; renderQuestion(); save(); }, '→']]);
+  }
+  show('sSpecial');
+  beep(660, .15, .1); beep(880, .25, .1, .12);
+}
+$('spBody').addEventListener('click', (e) => {
+  const c = e.target.closest('[data-cat]'); if (c) { S.cur.player = Number(c.dataset.cat); renderCat(); save(); return; }
+  const a = e.target.closest('[data-auc]'); if (a) { S.cur.player = Number(a.dataset.auc); renderAuction(); return; }
+});
+function renderAuction() {
+  const q = qByNum(S.cur.num);
+  $('spIcon').textContent = '🔨';
+  $('spTitle').textContent = 'Аукціон!';
+  $('spText').textContent = `Тема «${q.theme}» · мінімальна ставка ${q.value}. Хто дав найбільшу ставку?`;
+  $('spBody').innerHTML = `<div class="pick-players">${S.players.map((p, i) => `<button class="btn btn-ghost ${S.cur.player === i ? 'sel' : ''}" data-auc="${i}">${esc(p.name)} · ${p.score}</button>`).join('')}</div>
+    <div class="bid-row"><span class="muted">Ставка:</span><input class="field" id="bid" type="number" step="50" min="${q.value}" value="${S.cur.stake || q.value}" />
+    <button class="btn btn-ghost" id="btnAllIn">Ва-банк</button></div>`;
+  $('btnAllIn').onclick = () => { if (S.cur.player == null) { toast('Спершу оберіть гравця'); return; } $('bid').value = Math.max(q.value, S.players[S.cur.player].score); };
+  host('Аукціон', [
+    ['Усі пас (грає той, хто обирав)', 'btn-ghost', () => { S.cur.player = S.chooser; S.cur.stake = q.value; S.phase = 'question'; renderQuestion(); save(); }],
+    ['Показати запитання', 'btn-gold', () => {
+      if (S.cur.player == null) { toast('Оберіть, хто виграв аукціон'); return; }
+      const bid = Number($('bid').value) || q.value;
+      if (bid < q.value) { toast(`Ставка не може бути меншою за ${q.value}`); return; }
+      S.cur.stake = bid; S.phase = 'question'; renderQuestion(); save();
+    }, '→'],
+  ]);
+  show('sSpecial');
+}
+
+// ---- Запитання ----
+function renderQuestion() {
+  const q = qByNum(S.cur.num);
+  const special = S.cur.mode !== 'normal';
+  $('qT').textContent = `${S.cur.mode === 'cat' ? (q.catTheme || q.theme) : q.theme} · ${S.cur.stake}`;
+  $('qM').textContent = S.cur.mode === 'cat' ? `🐱 Кіт у мішку → ${S.players[S.cur.player].name}` : S.cur.mode === 'auction' ? `🔨 Аукціон → ${S.players[S.cur.player].name}` : round().name;
+  $('qText').textContent = q.question || '';
+  $('qText').style.fontSize = q.question && q.question.length > 240 ? 'clamp(1.1rem,2.2vw,2rem)' : '';
+  $('qMedia').innerHTML = renderMediaHTML(q.media);
+  $('qAnswer').innerHTML = S.cur.revealed ? answerHTML(q) : '';
+  const media = $('qMedia').querySelector('audio, video');
+  if (media && !S.cur.revealed) media.play().catch(() => {});
+  // судді
+  const who = special ? [S.cur.player] : S.players.map((_, i) => i);
+  $('judge').innerHTML = S.cur.revealed ? '' : who.map((i) => `<span class="jp ${S.cur.tried.includes(i) ? 'off' : ''}"><b>${esc(S.players[i].name)}</b>
+      <button class="btn btn-ok" data-ok="${i}" title="Правильно">✓</button><button class="btn btn-bad" data-bad="${i}" title="Неправильно">✗</button></span>`).join('');
+  show('sQuestion');
+  if (S.cur.revealed) host('Відповідь', [['До табло', 'btn-gold', () => finishCell(), '→']]);
+  else {
+    const btns = [];
+    if (S.timer) btns.push(['Таймер', 'btn-ghost', () => toggleTimer(), 'Пробіл']);
+    btns.push(['Показати відповідь', 'btn-gold', () => reveal(), 'Enter']);
+    host(special ? 'Відповідає один гравець' : 'Хто відповідає?', btns);
+    if (S.timer) startTimer(S.timer);
+  }
+}
+function answerHTML(q) { return `<div class="answer"><div class="l">Відповідь</div><div class="a">${esc(q.answer || '—')}</div>${q.comment ? `<div class="c">${esc(q.comment)}</div>` : ''}</div>`; }
+$('judge').addEventListener('click', (e) => {
+  const ok = e.target.closest('[data-ok]'), bad = e.target.closest('[data-bad]');
+  if (ok) { const i = Number(ok.dataset.ok); change(i, S.cur.stake); S.chooser = i; beep(523, .2); beep(784, .35, .15, .12); reveal(); }
+  else if (bad) {
+    const i = Number(bad.dataset.bad);
+    if (S.minus || S.cur.mode !== 'normal') change(i, -S.cur.stake);
+    S.cur.tried.push(i); beep(220, .4, .14);
+    const left = (S.cur.mode !== 'normal' ? [S.cur.player] : S.players.map((_, k) => k)).filter((k) => !S.cur.tried.includes(k));
+    if (!left.length) reveal(); else { renderQuestion(); save(); }
+  }
+});
+function reveal() { S.cur.revealed = true; stopTimer(); renderQuestion(); save(); }
+function finishCell() {
+  S.played.push(S.cur.num);
+  S.cur = null;
+  go('board');
+}
+function change(i, delta, label) {
+  S.players[i].score += delta;
+  S.history.push({ i, delta, num: S.cur ? S.cur.num : null, label });
+  renderPlayers(i);
+  save();
+}
+$('btnUndo').onclick = undo;
+function undo() {
+  const h = S && S.history.pop();
+  if (!h) { toast('Немає що скасовувати'); return; }
+  S.players[h.i].score -= h.delta;
+  renderPlayers(h.i);
+  toast(`Скасовано: ${S.players[h.i].name} ${h.delta > 0 ? '−' : '+'}${Math.abs(h.delta)}`);
+  save();
+}
+
+// ---- Гравці ----
+function renderPlayers(bumpIdx) {
+  const el = $('players');
+  el.hidden = !S || ['results'].includes(S.phase);
+  el.innerHTML = S.players.map((p, i) => `<div class="pl ${i === S.chooser && ['board', 'roundIntro'].includes(S.phase) ? 'chooser' : ''} ${i === bumpIdx ? 'bump' : ''}">
+    <div class="n" data-choose="${i}" title="Зробити тим, хто обирає">${esc(p.name)}</div>
+    <div class="s ${p.score < 0 ? 'neg' : ''}" data-edit="${i}" title="Виправити рахунок">${p.score}</div></div>`).join('');
+}
+$('players').addEventListener('click', (e) => {
+  const c = e.target.closest('[data-choose]');
+  if (c) { S.chooser = Number(c.dataset.choose); renderPlayers(); if (S.phase === 'board') renderBoard(); save(); return; }
+  const ed = e.target.closest('[data-edit]');
+  if (ed) {
+    const i = Number(ed.dataset.edit);
+    dialog(`Рахунок: ${S.players[i].name}`, 'Введіть правильний рахунок', [
+      { label: 'Скасувати' },
+      { label: 'Зберегти', cls: 'btn-gold', run: () => { const v = Number($('editScore').value); if (Number.isNaN(v)) return false; change(i, v - S.players[i].score, 'manual'); } },
+    ], `<input class="field" id="editScore" type="number" step="50" value="${S.players[i].score}" style="margin-top:.6rem;font-size:1.3rem;text-align:center;" />`);
+    setTimeout(() => $('editScore').select(), 30);
+  }
+});
+
+// ---- Фінал ----
+function finalists() {
+  const pos = S.players.map((p, i) => i).filter((i) => S.players[i].score > 0);
+  return pos.length ? pos : S.players.map((p, i) => i);
+}
+function renderFinal(phase) {
+  const r = round();
+  S.final = S.final || { removed: [], bets: {}, judged: {} };
+  const F = S.final;
+  const themes = r.themes.filter((t) => t.questions.length);
+  const left = themes.filter((t) => !F.removed.includes(t.name));
+  const fin = finalists();
+  show('sFinal');
+  if (phase === 'finalThemes') {
+    if (left.length <= 1) { go('finalBets'); return; }
+    $('fTitle').textContent = 'Прибираємо теми';
+    $('fText').textContent = 'Гравці по черзі називають тему, яку прибрати. Залишиться одна.';
+    $('fBody').innerHTML = `<div class="final-themes">${themes.map((t) => `<button data-rm="${esc(t.name)}" class="${F.removed.includes(t.name) ? 'gone' : ''}" ${F.removed.includes(t.name) ? 'disabled' : ''}>${esc(t.name)}</button>`).join('')}</div>`;
+    host('Фінал · теми', [['↶ Повернути тему', 'btn-ghost', () => { F.removed.pop(); go('finalThemes'); }]]);
+  } else if (phase === 'finalBets') {
+    const t = left[0];
+    $('fTitle').textContent = t.name;
+    $('fText').textContent = `Ставки роблять: ${fin.map((i) => S.players[i].name).join(', ')}. Ставка — від 1 до свого рахунку.`;
+    $('fBody').innerHTML = `<div class="bets">${fin.map((i) => `<div class="score-item"><b>${esc(S.players[i].name)}</b><span class="dim">${S.players[i].score}</span>
+      <input class="field" type="number" min="0" max="${Math.max(0, S.players[i].score)}" data-bet="${i}" value="${F.bets[i] ?? ''}" placeholder="ставка" /></div>`).join('')}</div>`;
+    host('Фінал · ставки', [['Показати запитання', 'btn-gold', () => {
+      for (const i of fin) {
+        const b = Number(F.bets[i]);
+        if (!(b >= 0)) { toast(`Немає ставки: ${S.players[i].name}`); return; }
+        if (S.players[i].score > 0 && b > S.players[i].score) { toast(`Ставка більша за рахунок: ${S.players[i].name}`); return; }
+      }
+      go('finalQ');
+    }, '→']]);
+  } else if (phase === 'finalQ' || phase === 'finalJudge') {
+    const q = left[0].questions[0];
+    $('fTitle').textContent = left[0].name;
+    $('fText').textContent = '';
+    $('fBody').innerHTML = `<article class="qcard cell-zoom"><div class="qhead"><span class="t">Фінальне запитання</span><span class="m">${esc(left[0].name)}</span></div>
+      <div class="qtext">${esc(q.question || '')}</div>${renderMediaHTML(q.media)}${phase === 'finalJudge' ? answerHTML(q) : ''}
+      ${phase === 'finalQ' ? '<div class="qtimer"><div class="tbar" id="tbar2"><i id="tbarFill2"></i></div><span class="tnum" id="tnum2"></span></div>' : ''}
+      ${phase === 'finalJudge' ? `<div class="judge">${fin.map((i) => `<span class="jp"><b>${esc(S.players[i].name)} · ${F.bets[i]}</b>
+        <button class="btn ${F.judged[i] === true ? 'btn-gold' : 'btn-ok'}" data-fok="${i}">✓</button><button class="btn ${F.judged[i] === false ? 'btn-gold' : 'btn-bad'}" data-fbad="${i}">✗</button></span>`).join('')}</div>` : ''}</article>`;
+    if (phase === 'finalQ') {
+      const m = $('fBody').querySelector('audio, video'); if (m) m.play().catch(() => {});
+      startTimer(60, 'tbar2', 'tbarFill2', 'tnum2');
+      host('Фінал · запитання', [['Таймер', 'btn-ghost', () => toggleTimer(), 'Пробіл'], ['Показати відповідь', 'btn-gold', () => go('finalJudge'), '→']]);
+    } else {
+      host('Фінал · перевірка', [['Підсумки', 'btn-gold', () => {
+        if (fin.some((i) => F.judged[i] === undefined)) { toast('Позначте відповідь кожного фіналіста'); return; }
+        go('results');
+      }, '→']]);
+    }
+  }
+}
+$('fBody').addEventListener('click', (e) => {
+  const rm = e.target.closest('[data-rm]');
+  if (rm) { S.final.removed.push(rm.dataset.rm); beep(300, .2, .1); go('finalThemes'); return; }
+  const ok = e.target.closest('[data-fok]'), bad = e.target.closest('[data-fbad]');
+  if (ok || bad) {
+    const i = Number((ok || bad).dataset[ok ? 'fok' : 'fbad']);
+    const val = !!ok, F = S.final, bet = Number(F.bets[i]) || 0;
+    if (F.judged[i] === val) return;
+    if (F.judged[i] !== undefined) change(i, F.judged[i] ? -bet : bet, 'final-undo');
+    F.judged[i] = val;
+    change(i, val ? bet : -bet, 'final');
+    renderFinal('finalJudge'); save();
+  }
+});
+$('fBody').addEventListener('input', (e) => { const i = e.target.dataset.bet; if (i != null) { S.final.bets[i] = e.target.value === '' ? undefined : Number(e.target.value); save(); } });
+
+// ---- Підсумки ----
+function renderResults() {
+  const rows = S.players.map((p, i) => ({ ...p, i })).sort((a, b) => b.score - a.score);
+  const top = rows.filter((r) => r.score === rows[0].score);
+  $('resWinner').textContent = top.length > 1 ? 'Нічия!' : `Перемагає ${rows[0].name}!`;
+  let place = 0, prev = null; rows.forEach((r, k) => { if (r.score !== prev) place = k + 1; r.place = place; prev = r.score; });
+  $('resPodium').innerHTML = `<div class="podium">${[1, 0, 2].filter((k) => rows[k]).map((k) => `<div class="pod p${k + 1}"><div class="nm">${esc(rows[k].name)}</div><div class="pts">${rows[k].score}</div><div class="bar">${rows[k].place}</div></div>`).join('')}</div>
+    ${rows.length > 3 ? `<table class="board-table" style="max-width:700px;margin:0 auto;">${rows.slice(3).map((r) => `<tr><td>${r.place}</td><td class="name">${esc(r.name)}</td><td>${r.score}</td></tr>`).join('')}</table>` : ''}`;
+  show('sResults');
+  $('players').hidden = true;
+  beep(523, .3); beep(659, .3, .15, .15); beep(784, .3, .15, .3); beep(1046, .7, .15, .45);
+  host('Кінець гри', [['Нова гра', 'btn-gold', () => { localStorage.removeItem(KEY); location.reload(); }]]);
+}
+
+// ---- Таймер ----
+let tm = { left: 0, total: 0, run: false, last: 0, raf: 0, ids: null };
+function startTimer(sec, bar = 'tbar', fill = 'tbarFill', num = 'tnum') {
+  stopTimer();
+  tm = { left: sec * 1000, total: sec * 1000, run: true, last: performance.now(), raf: 0, ids: [bar, fill, num] };
+  if (bar === 'tbar') $('qTimer').hidden = false;
+  loop();
+}
+function loop() {
+  const [bar, fill, num] = tm.ids;
+  const step = () => {
+    const now = performance.now();
+    if (tm.run) tm.left -= now - tm.last;
+    tm.last = now;
+    const left = Math.max(0, tm.left);
+    if (!$(fill)) return;
+    $(fill).style.transform = `scaleX(${left / tm.total})`;
+    $(num).textContent = Math.ceil(left / 1000) + ' с';
+    $(bar).className = 'tbar' + (left < tm.total * .2 ? ' crit' : left < tm.total * .45 ? ' warn' : '');
+    if (left <= 0 && tm.run) { tm.run = false; $(num).textContent = 'Час!'; beep(220, .8, .2); return; }
+    tm.raf = requestAnimationFrame(step);
+  };
+  cancelAnimationFrame(tm.raf);
+  tm.raf = requestAnimationFrame(step);
+}
+function toggleTimer() { if (!tm.total) return; if (tm.left <= 0) { startTimer(tm.total / 1000, ...tm.ids); return; } tm.run = !tm.run; tm.last = performance.now(); if (tm.run) loop(); toast(tm.run ? 'Таймер іде' : 'Пауза', 900); }
+function stopTimer() { cancelAnimationFrame(tm.raf); tm.run = false; if ($('qTimer')) $('qTimer').hidden = true; }
+function pauseMedia() { document.querySelectorAll('audio, video').forEach((m) => { try { m.pause(); } catch {} }); }
+
+// ---- Клавіші ----
+document.addEventListener('keydown', (e) => {
+  // Enter у полі ставки (аукціон, фінал) = «далі»
+  if (e.target.tagName === 'INPUT' && e.key === 'Enter' && (e.target.id === 'bid' || e.target.dataset.bet != null) && hostActions['→']) { e.preventDefault(); e.target.blur(); hostActions['→'](); return; }
+  if (e.target.tagName === 'INPUT' || e.ctrlKey || e.metaKey || e.altKey || $('dlg').classList.contains('open')) return;
+  if (e.code === 'KeyF') { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.().catch(() => toast('Повний екран недоступний')); return; }
+  if (!S || $('sSetup').classList.contains('active')) return;
+  if (e.code === 'ArrowRight' && hostActions['→']) { e.preventDefault(); hostActions['→'](); }
+  else if (e.code === 'Enter' && hostActions['Enter']) { e.preventDefault(); hostActions['Enter'](); }
+  else if (e.code === 'Space' && hostActions['Пробіл']) { e.preventDefault(); hostActions['Пробіл'](); }
+  else if (e.code === 'KeyZ') undo();
+});
+$('btnFs').onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.().catch(() => toast('Повний екран недоступний')); };
+init();
+</script>
+</body>
+</html>

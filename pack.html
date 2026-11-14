@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Редактор пакета</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="supabase.js"></script>
+  <script src="games.js"></script>
+  <style>
+    .pk-back { display:inline-block; margin-bottom:1rem; font-size:.9rem; }
+    .pk-head { display:flex; justify-content:space-between; gap:1.5rem; flex-wrap:wrap; align-items:flex-start; margin-bottom:1.5rem; }
+    .pk-head-main { flex:1; min-width:280px; }
+    .pk-title-input { width:100%; background:transparent; border:0; border-bottom:1px dashed var(--border); color:var(--text);
+      font:900 clamp(1.5rem,3vw,2.2rem) 'Playfair Display',serif; padding:.2rem 0; margin:.5rem 0 .6rem; outline:none; }
+    .pk-title-input:focus { border-bottom-color:var(--accent); }
+    .pk-meta-row { display:flex; gap:.6rem; flex-wrap:wrap; }
+    .pk-meta-row .form-input { width:auto; min-width:200px; padding:.45rem .7rem; font-size:.9rem; }
+    .pk-actions { display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; }
+    .save-state { font-size:.82rem; color:var(--text-dim); margin-right:.3rem; }
+    .save-state.dirty { color:#e0a54a; }
+    .pk-summary { color:var(--text-muted); font-size:.9rem; margin-top:.4rem; }
+
+    /* ГлуздоГерць */
+    .tour-block { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:1rem 1.1rem; margin-bottom:1.2rem; }
+    .tour-head { display:flex; gap:.7rem; align-items:center; margin-bottom:.8rem; flex-wrap:wrap; }
+    .tour-num { font:700 1.15rem 'Playfair Display',serif; color:var(--accent); white-space:nowrap; }
+    .tour-name { flex:1; min-width:180px; }
+    .tour-count { color:var(--text-dim); font-size:.85rem; }
+    .gq-card { display:grid; grid-template-columns:auto 1fr auto; gap:.8rem; padding:.8rem; border:1px solid var(--border); border-radius:var(--radius); background:var(--bg); margin-bottom:.6rem; }
+    .gq-num { font:700 1.05rem 'Playfair Display',serif; color:var(--accent); min-width:1.8rem; text-align:center; padding-top:.35rem; }
+    .gq-fields { display:flex; flex-direction:column; gap:.45rem; min-width:0; }
+    .gq-fields textarea { min-height:3.2em; resize:vertical; }
+    .gq-row { display:grid; grid-template-columns:1fr 1fr; gap:.45rem; }
+    .gq-tools { display:flex; flex-direction:column; gap:.25rem; }
+    .gq-tools button { padding:.25rem .5rem; font-size:.8rem; }
+    .gq-card .form-input { padding:.5rem .7rem; font-size:.92rem; }
+    .add-dashed { width:100%; justify-content:center; border:1px dashed var(--border) !important; }
+
+    /* медіа */
+    .media-row { display:flex; flex-wrap:wrap; gap:.4rem; align-items:center; }
+    .media-chip { display:inline-flex; align-items:center; gap:.35rem; background:var(--bg-hover); border:1px solid var(--border); border-radius:8px; padding:.2rem .4rem; font-size:.8rem; color:var(--text-muted); max-width:220px; }
+    .media-chip img { width:42px; height:30px; object-fit:cover; border-radius:4px; }
+    .media-chip a { color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:130px; }
+    .media-chip button { background:none; border:0; color:var(--danger); cursor:pointer; font-size:.9rem; }
+    .media-btn { font-size:.78rem !important; padding:.25rem .55rem !important; }
+    .media-uploading { font-size:.8rem; color:#e0a54a; }
+
+    /* Своя гра */
+    .round-tabs { display:flex; gap:.4rem; flex-wrap:wrap; margin-bottom:1rem; }
+    .round-tab { background:var(--bg-card); border:1px solid var(--border); color:var(--text-muted); border-radius:999px; padding:.45rem 1rem; cursor:pointer; font-weight:600; font-size:.9rem; }
+    .round-tab.active { background:var(--accent); color:#0d1117; border-color:transparent; }
+    .round-tab.add { border-style:dashed; }
+    .round-head { display:flex; gap:.6rem; align-items:center; margin-bottom:.9rem; flex-wrap:wrap; }
+    .round-head .form-input { max-width:340px; }
+    .board-ed { display:flex; flex-direction:column; gap:.45rem; overflow-x:auto; padding-bottom:.4rem; }
+    .theme-row { display:grid; grid-template-columns:minmax(170px,230px) 1fr auto; gap:.45rem; align-items:stretch; }
+    .theme-row .theme-name { font-weight:600; }
+    .cells { display:flex; gap:.45rem; }
+    .cell { flex:0 1 200px; min-width:105px; min-height:74px; background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:.4rem .5rem; cursor:pointer; text-align:left; color:var(--text); display:flex; flex-direction:column; gap:.15rem; transition:border-color .15s, transform .15s; font-family:inherit; }
+    .cell:hover { border-color:var(--accent); transform:translateY(-1px); }
+    .cell-val { font:700 1.1rem 'Playfair Display',serif; color:var(--accent); }
+    .cell-q { font-size:.75rem; color:var(--text-muted); overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+    .cell-q.empty { color:var(--danger); opacity:.8; }
+    .cell-badges { font-size:.72rem; }
+    .cell.add { flex:0 0 46px; align-items:center; justify-content:center; border-style:dashed; color:var(--text-dim); font-size:1.2rem; }
+    .final-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:1rem; margin-bottom:.8rem; }
+    .final-card .gq-fields { margin-top:.5rem; }
+    .qm-grid { display:grid; grid-template-columns:1fr 1fr; gap:.7rem; }
+    @media (max-width:700px) { .gq-row, .qm-grid { grid-template-columns:1fr; } .theme-row { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="header-inner">
+    <div class="site-logo">ЩДК <span>/ редактор пакета</span></div>
+    <nav class="nav-links">
+      <a href="index.html">Пакети</a>
+      <a href="randomizer.html">🎲 Рандомайзер</a>
+      <a href="studio.html">🎩 Клуб знавців</a>
+    </nav>
+  </div>
+</header>
+
+<main class="main-content">
+  <a class="pk-back" href="index.html" id="backLink">← До пакетів</a>
+  <div id="loading" style="padding:3rem;text-align:center;color:var(--text-dim);">⏳ Завантаження пакета…</div>
+
+  <div id="pkWrap" style="display:none;">
+    <div class="pk-head">
+      <div class="pk-head-main">
+        <span class="game-badge" id="gameBadge"></span>
+        <input class="pk-title-input" id="pkTitle" placeholder="Назва пакета" />
+        <div class="pk-meta-row">
+          <input class="form-input" id="pkTournament" placeholder="Турнір / подія" />
+          <input class="form-input" id="pkDate" type="date" />
+        </div>
+        <div class="pk-summary" id="pkSummary"></div>
+      </div>
+      <div class="pk-actions">
+        <span class="save-state" id="saveState">Збережено</span>
+        <button class="btn btn-secondary" type="button" onclick="openImport()">📋 Імпорт тексту</button>
+        <button class="btn btn-secondary" type="button" onclick="savePackage()">💾 Зберегти</button>
+        <button class="btn btn-primary" type="button" onclick="playPackage()">▶ Грати</button>
+      </div>
+    </div>
+    <div id="editor"></div>
+  </div>
+</main>
+
+<!-- Імпорт тексту -->
+<div class="modal-overlay" id="importModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title">📋 Імпорт тексту</h2>
+      <button class="modal-close" onclick="closeModal('importModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <textarea class="form-input" id="impText" rows="12" style="font-family:monospace;font-size:.85rem;resize:vertical;" placeholder="Вставте текст пакета…"></textarea>
+      <div style="display:flex;gap:1rem;margin:.8rem 0;color:var(--text-muted);flex-wrap:wrap;">
+        <label><input type="radio" name="impMode" value="append" checked /> Додати до наявного</label>
+        <label><input type="radio" name="impMode" value="replace" /> Замінити весь вміст</label>
+      </div>
+      <pre id="impHelp" style="white-space:pre-wrap;font-size:.8rem;color:var(--text-dim);"></pre>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('importModal')">Скасувати</button>
+      <button class="btn btn-primary" onclick="applyImport()">Імпортувати</button>
+    </div>
+  </div>
+</div>
+
+<!-- Редагування клітинки Своєї гри -->
+<div class="modal-overlay" id="qModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title" id="qmTitle">Запитання</h2>
+      <button class="modal-close" onclick="closeModal('qModal')">✕</button>
+    </div>
+    <div class="modal-body" id="qmBody"></div>
+    <div class="modal-footer">
+      <button class="btn btn-danger" onclick="deleteCurrentCell()">🗑 Видалити клітинку</button>
+      <button class="btn btn-primary" onclick="closeModal('qModal')">Готово</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="mediaFile" hidden />
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+// ════════════════════════════════════════════
+//  СТАН
+// ════════════════════════════════════════════
+let pkg = null;
+let dirty = false;
+let activeRound = null;     // ключ раунду Своєї гри
+let editingNum = null;      // номер запитання в модалці
+const esc = gEsc;
+
+function toast(text, type = 'info') {
+  const icons = { success: '✅', error: '❌', info: 'ℹ️' };
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.innerHTML = `<span>${icons[type]}</span><span>${esc(text)}</span>`;
+  document.getElementById('toastContainer').appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+function setDirty(v = true) {
+  dirty = v;
+  const s = document.getElementById('saveState');
+  s.textContent = v ? 'Є незбережені зміни' : 'Збережено';
+  s.classList.toggle('dirty', v);
+}
+function closeModal(id) { document.getElementById(id).classList.remove('active'); if (id === 'qModal') { editingNum = null; render(); } }
+function openModal(id) { document.getElementById(id).classList.add('active'); }
+const byNum = (n) => pkg.questions.find((q) => q.number === n);
+const nextNum = () => pkg.questions.reduce((m, q) => Math.max(m, q.number || 0), 0) + 1;
+const isGluzdo = () => pkg.game === 'gluzdo';
+
+// ════════════════════════════════════════════
+//  ЗАВАНТАЖЕННЯ / ЗБЕРЕЖЕННЯ
+// ════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', async () => {
+  const id = new URLSearchParams(location.search).get('id');
+  if (!id) { document.getElementById('loading').textContent = 'Не вказано пакет.'; return; }
+  try {
+    pkg = await dbGetPackage(id);
+  } catch (e) {
+    document.getElementById('loading').textContent = 'Не вдалося завантажити пакет: ' + e.message;
+    return;
+  }
+  if (!pkg) { document.getElementById('loading').textContent = 'Пакет не знайдено.'; return; }
+  if (pkg.game === 'chgk') { location.replace(`questions.html?id=${encodeURIComponent(id)}`); return; }
+  pkg.questions = (pkg.questions || []).map((q) => ({ media: [], comment: '', answer: '', question: '', ...q }));
+  pkg.tags_data = pkg.tags_data || {};
+  document.getElementById('backLink').href = `index.html?game=${pkg.game}`;
+  document.getElementById('gameBadge').textContent = `${GAMES[pkg.game].icon} ${GAMES[pkg.game].name}`;
+  document.getElementById('pkTitle').value = pkg.title || '';
+  document.getElementById('pkTournament').value = pkg.tournament || '';
+  document.getElementById('pkDate').value = pkg.date || '';
+  document.title = `${pkg.title} — редактор`;
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('pkWrap').style.display = '';
+  ['pkTitle', 'pkTournament', 'pkDate'].forEach((id) => document.getElementById(id).addEventListener('input', () => setDirty()));
+  bindEditor();
+  render();
+});
+
+function canonicalOrder() {
+  if (isGluzdo()) {
+    const tours = Gluzdo.tours(pkg);
+    return tours.flatMap((t) => t.questions);
+  }
+  return Svoya.rounds(pkg).flatMap((r) => r.themes.flatMap((t) => t.questions));
+}
+async function savePackage(silent) {
+  pkg.title = document.getElementById('pkTitle').value.trim() || 'Без назви';
+  pkg.tournament = document.getElementById('pkTournament').value.trim();
+  pkg.date = document.getElementById('pkDate').value;
+  pkg.questions = canonicalOrder();
+  try {
+    await dbUpdatePackage(pkg);
+    setDirty(false);
+    if (!silent) toast('Пакет збережено', 'success');
+    return true;
+  } catch (e) {
+    toast('Помилка збереження: ' + e.message, 'error');
+    return false;
+  }
+}
+async function playPackage() {
+  if (dirty && !(await savePackage(true))) return;
+  location.href = playUrl(pkg);
+}
+window.addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+document.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); savePackage(); } });
+
+// ════════════════════════════════════════════
+//  РЕНДЕР
+// ════════════════════════════════════════════
+function render() {
+  document.getElementById('pkSummary').textContent = packageSummary(pkg);
+  if (isGluzdo()) renderGluzdo(); else renderSvoya();
+}
+
+function mediaRowHTML(q) {
+  const chips = (q.media || []).map((m, i) => `
+    <span class="media-chip">${m.type === 'image' ? `<img src="${esc(m.url)}" alt="" />` : (m.type === 'audio' ? '🎵' : '🎬')}
+      <a href="${esc(m.url)}" target="_blank" rel="noopener">${esc(m.name || m.url.split('/').pop())}</a>
+      <button type="button" title="Прибрати" data-media-del="${q.number}" data-i="${i}">✕</button></span>`).join('');
+  return `<div class="media-row">${chips}
+    <button type="button" class="btn btn-ghost media-btn" data-upload="${q.number}" data-kind="image">🖼 Картинка</button>
+    <button type="button" class="btn btn-ghost media-btn" data-upload="${q.number}" data-kind="audio">🎵 Аудіо</button>
+    <button type="button" class="btn btn-ghost media-btn" data-upload="${q.number}" data-kind="video">🎬 Відео</button>
+    <button type="button" class="btn btn-ghost media-btn" data-media-url="${q.number}">🔗 За посиланням</button>
+    <span class="media-uploading" id="up_${q.number}"></span></div>`;
+}
+function qFieldsHTML(q, opts = {}) {
+  return `<div class="gq-fields" data-num="${q.number}">
+    <textarea class="form-input" data-f="question" rows="${opts.rows || 2}" placeholder="Текст запитання">${esc(q.question)}</textarea>
+    <div class="gq-row">
+      <input class="form-input" data-f="answer" placeholder="Відповідь" value="${esc(q.answer)}" />
+      <input class="form-input" data-f="comment" placeholder="Коментар / джерело" value="${esc(q.comment)}" />
+    </div>
+    ${mediaRowHTML(q)}
+  </div>`;
+}
+
+// ---- ГлуздоГерць ----
+function renderGluzdo() {
+  const tours = Gluzdo.tours(pkg);
+  let html = '';
+  for (const t of tours) {
+    html += `<section class="tour-block" data-tour="${t.tour}">
+      <div class="tour-head">
+        <span class="tour-num">Тур ${t.tour}</span>
+        <input class="form-input tour-name" data-tour-name="${t.tour}" placeholder="Назва туру (наприклад, «Музичний»)" value="${esc((pkg.tags_data.__tours || {})[t.tour] || '')}" />
+        <span class="tour-count">${t.questions.length} ${gPlural(t.questions.length, 'запитання', 'запитання', 'запитань')}</span>
+        <button class="btn btn-danger" type="button" data-del-tour="${t.tour}" style="font-size:.8rem;padding:.3rem .6rem;">🗑 Тур</button>
+      </div>
+      ${t.questions.map((q, i) => `<div class="gq-card">
+        <div class="gq-num">${i + 1}</div>
+        ${qFieldsHTML(q)}
+        <div class="gq-tools">
+          <button class="btn btn-ghost" type="button" data-move="${q.number}" data-d="-1" title="Вище">↑</button>
+          <button class="btn btn-ghost" type="button" data-move="${q.number}" data-d="1" title="Нижче">↓</button>
+          <button class="btn btn-ghost" type="button" data-del-q="${q.number}" title="Видалити" style="color:var(--danger);">🗑</button>
+        </div></div>`).join('')}
+      <button class="btn btn-ghost add-dashed" type="button" data-add-q="${t.tour}">+ Запитання в тур ${t.tour}</button>
+    </section>`;
+  }
+  html += `<button class="btn btn-secondary add-dashed" type="button" data-add-tour>+ Додати тур</button>`;
+  document.getElementById('editor').innerHTML = html;
+}
+
+// ---- Своя гра ----
+function renderSvoya() {
+  const rounds = Svoya.rounds(pkg);
+  if (!rounds.find((r) => r.key === activeRound)) activeRound = rounds[0] ? rounds[0].key : null;
+  const hasFinal = rounds.some((r) => r.isFinal);
+  let html = `<div class="round-tabs">${rounds.map((r) => `<button type="button" class="round-tab ${r.key === activeRound ? 'active' : ''}" data-round-tab="${r.key}">${esc(r.name)}</button>`).join('')}
+    <button type="button" class="round-tab add" data-add-round>+ Раунд</button>
+    ${hasFinal ? '' : '<button type="button" class="round-tab add" data-add-final>+ Фінал</button>'}</div>`;
+  const r = rounds.find((x) => x.key === activeRound);
+  if (!r) { html += '<p style="color:var(--text-dim)">Немає раундів — додайте перший.</p>'; document.getElementById('editor').innerHTML = html; return; }
+  html += `<div class="round-head">
+    <input class="form-input" data-round-name="${r.key}" value="${esc((pkg.tags_data.__rounds || {})[r.key] || '')}" placeholder="${esc(r.isFinal ? 'Фінал' : 'Раунд ' + r.key)} (назва)" />
+    <button class="btn btn-danger" type="button" data-del-round="${r.key}" style="font-size:.85rem;">🗑 Видалити ${r.isFinal ? 'фінал' : 'раунд'}</button>
+  </div>`;
+  if (r.isFinal) {
+    html += '<p style="color:var(--text-muted);font-size:.9rem;margin-bottom:.8rem;">У фіналі гравці по черзі прибирають теми; на тему, що лишилась, роблять ставки.</p>';
+    html += r.themes.map((t) => t.questions.map((q) => `<div class="final-card">
+        <div class="tour-head" style="margin:0;"><span class="tour-num">Тема</span>
+          <input class="form-input" data-final-theme="${q.number}" value="${esc(q.theme)}" placeholder="Назва теми" style="flex:1;" />
+          <button class="btn btn-ghost" type="button" data-del-q="${q.number}" style="color:var(--danger);">🗑</button></div>
+        ${qFieldsHTML(q)}</div>`).join('')).join('');
+    html += `<button class="btn btn-ghost add-dashed" type="button" data-add-final-theme>+ Фінальна тема</button>`;
+  } else {
+    html += '<div class="board-ed">' + r.themes.map((t) => `<div class="theme-row">
+      <input class="form-input theme-name" data-theme-rename="${esc(t.name)}" value="${esc(t.name)}" />
+      <div class="cells">${t.questions.map((q) => `<button type="button" class="cell" data-cell="${q.number}">
+          <span class="cell-val">${q.value}</span>
+          <span class="cell-q ${q.question.trim() || (q.media || []).length ? '' : 'empty'}">${esc(q.question.trim() || ((q.media || []).length ? '[медіа]' : 'порожньо'))}</span>
+          <span class="cell-badges">${q.type === 'cat' ? '🐱 кіт' : ''}${q.type === 'auction' ? '🔨 аукціон' : ''} ${(q.media || []).map((m) => m.type === 'image' ? '🖼' : m.type === 'audio' ? '🎵' : '🎬').join('')} ${q.answer.trim() ? '' : '<span style="color:var(--danger)">без відповіді</span>'}</span>
+        </button>`).join('')}
+        <button type="button" class="cell add" data-add-cell="${esc(t.name)}" title="Додати ціну">+</button></div>
+      <button class="btn btn-ghost" type="button" data-del-theme="${esc(t.name)}" title="Видалити тему" style="color:var(--danger);">🗑</button>
+    </div>`).join('') + '</div>';
+    html += `<button class="btn btn-ghost add-dashed" type="button" data-add-theme style="margin-top:.6rem;">+ Тема</button>`;
+  }
+  document.getElementById('editor').innerHTML = html;
+}
+
+function openCell(num) {
+  const q = byNum(num); if (!q) return;
+  editingNum = num;
+  document.getElementById('qmTitle').textContent = `${q.theme} · ${q.value}`;
+  document.getElementById('qmBody').innerHTML = `
+    <div class="qm-grid">
+      <div class="form-group"><label class="form-label">Ціна</label><input class="form-input" type="number" step="10" data-qm="value" value="${q.value}" /></div>
+      <div class="form-group"><label class="form-label">Тип</label><select class="form-input" data-qm="type">
+        ${Object.entries(Svoya.TYPES).map(([k, v]) => `<option value="${k}" ${q.type === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+    </div>
+    <div class="qm-grid" id="catFields" style="${q.type === 'cat' ? '' : 'display:none'}">
+      <div class="form-group"><label class="form-label">Тема кота (оголошується гравцю)</label><input class="form-input" data-qm="catTheme" value="${esc(q.catTheme || '')}" placeholder="${esc(q.theme)}" /></div>
+      <div class="form-group"><label class="form-label">Ціна кота</label><input class="form-input" type="number" step="10" data-qm="catValue" value="${q.catValue || q.value}" /></div>
+    </div>
+    <p id="auctionNote" style="${q.type === 'auction' ? '' : 'display:none'};color:var(--text-muted);font-size:.85rem;margin-bottom:.8rem;">Аукціон: гравці торгуються, мінімальна ставка — ціна клітинки.</p>
+    ${qFieldsHTML(q, { rows: 4 })}`;
+  openModal('qModal');
+}
+function deleteCurrentCell() {
+  if (editingNum == null) return;
+  if (!confirm('Видалити це запитання?')) return;
+  pkg.questions = pkg.questions.filter((q) => q.number !== editingNum);
+  setDirty();
+  closeModal('qModal');
+}
+
+// ════════════════════════════════════════════
+//  ПОДІЇ РЕДАКТОРА
+// ════════════════════════════════════════════
+function bindEditor() {
+  const root = document.body;
+  root.addEventListener('input', (e) => {
+    const t = e.target;
+    const f = t.dataset.f;
+    if (f) {
+      const num = Number(t.closest('[data-num]').dataset.num);
+      const q = byNum(num); if (q) { q[f] = t.value; setDirty(); }
+      return;
+    }
+    if (t.dataset.qm) {
+      const q = byNum(editingNum); if (!q) return;
+      const k = t.dataset.qm;
+      q[k] = (k === 'value' || k === 'catValue') ? Number(t.value) || 0 : t.value;
+      if (k === 'type') { document.getElementById('catFields').style.display = t.value === 'cat' ? '' : 'none'; document.getElementById('auctionNote').style.display = t.value === 'auction' ? '' : 'none'; }
+      document.getElementById('qmTitle').textContent = `${q.theme} · ${q.value}`;
+      setDirty();
+      return;
+    }
+    if (t.dataset.tourName) {
+      pkg.tags_data.__tours = pkg.tags_data.__tours || {};
+      if (t.value.trim()) pkg.tags_data.__tours[t.dataset.tourName] = t.value; else delete pkg.tags_data.__tours[t.dataset.tourName];
+      setDirty(); return;
+    }
+    if (t.dataset.roundName) {
+      pkg.tags_data.__rounds = pkg.tags_data.__rounds || {};
+      if (t.value.trim()) pkg.tags_data.__rounds[t.dataset.roundName] = t.value; else delete pkg.tags_data.__rounds[t.dataset.roundName];
+      document.querySelector(`[data-round-tab="${CSS.escape(t.dataset.roundName)}"]`).textContent = Svoya.roundName(pkg, t.dataset.roundName);
+      setDirty(); return;
+    }
+    if (t.dataset.finalTheme) { const q = byNum(Number(t.dataset.finalTheme)); if (q) { q.theme = t.value; setDirty(); } }
+  });
+  root.addEventListener('change', (e) => {
+    const t = e.target;
+    if (t.dataset.qm === 'type') t.dispatchEvent(new Event('input', { bubbles: true }));
+    if (t.dataset.themeRename !== undefined) {
+      const oldName = t.dataset.themeRename, name = t.value.trim();
+      if (!name || name === oldName) { t.value = oldName; return; }
+      const r = Svoya.rounds(pkg).find((x) => x.key === activeRound);
+      if (r.themes.some((x) => x.name === name)) { toast('Тема з такою назвою вже є в цьому раунді', 'error'); t.value = oldName; return; }
+      pkg.questions.forEach((q) => { if (String(q.round) === activeRound && q.theme === oldName) q.theme = name; });
+      setDirty(); render();
+    }
+  });
+  root.addEventListener('click', async (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    const d = b.dataset;
+    if (d.cell) return openCell(Number(d.cell));
+    if (d.roundTab) { activeRound = d.roundTab; return render(); }
+    if (d.upload) return pickMedia(Number(d.upload), d.kind);
+    if (d.mediaUrl) {
+      const url = prompt('Посилання на картинку, аудіо або відео:');
+      if (url && /^https?:\/\//.test(url.trim())) { byNum(Number(d.mediaUrl)).media.push({ type: mediaTypeFromUrl(url), url: url.trim() }); setDirty(); refreshAfterMedia(); }
+      return;
+    }
+    if (d.mediaDel) { byNum(Number(d.mediaDel)).media.splice(Number(d.i), 1); setDirty(); return refreshAfterMedia(); }
+    // ГлуздоГерць
+    if (d.addQ) { pkg.questions.push({ number: nextNum(), tour: Number(d.addQ), question: '', answer: '', comment: '', media: [] }); setDirty(); return render(); }
+    if (d.addTour !== undefined) {
+      const t = Gluzdo.tours(pkg).reduce((m, x) => Math.max(m, x.tour), 0) + 1;
+      for (let i = 0; i < 8; i++) pkg.questions.push({ number: nextNum(), tour: t, question: '', answer: '', comment: '', media: [] });
+      setDirty(); return render();
+    }
+    if (d.delTour) {
+      if (!confirm(`Видалити тур ${d.delTour} з усіма запитаннями?`)) return;
+      pkg.questions = pkg.questions.filter((q) => String(q.tour) !== d.delTour);
+      if (pkg.tags_data.__tours) delete pkg.tags_data.__tours[d.delTour];
+      setDirty(); return render();
+    }
+    if (d.delQ) {
+      if (!confirm('Видалити запитання?')) return;
+      pkg.questions = pkg.questions.filter((q) => q.number !== Number(d.delQ)); setDirty(); return render();
+    }
+    if (d.move) {
+      const q = byNum(Number(d.move));
+      const list = pkg.questions.filter((x) => x.tour === q.tour);
+      const i = list.indexOf(q), j = i + Number(d.d);
+      if (j < 0 || j >= list.length) return;
+      const a = pkg.questions.indexOf(q), bIdx = pkg.questions.indexOf(list[j]);
+      [pkg.questions[a], pkg.questions[bIdx]] = [pkg.questions[bIdx], pkg.questions[a]];
+      setDirty(); return render();
+    }
+    // Своя гра
+    if (d.addRound !== undefined) {
+      const k = Svoya.roundKeys(pkg).filter((x) => x !== 'F').reduce((m, x) => Math.max(m, Number(x)), 0) + 1;
+      for (let t = 1; t <= 5; t++) for (let i = 1; i <= 5; i++) pkg.questions.push({ number: nextNum(), round: k, theme: `Тема ${t}`, value: 100 * k * i, type: 'normal', question: '', answer: '', comment: '', media: [] });
+      activeRound = String(k); setDirty(); return render();
+    }
+    if (d.addFinal !== undefined) {
+      for (let t = 1; t <= 3; t++) pkg.questions.push({ number: nextNum(), round: 'F', theme: `Фінальна тема ${t}`, value: 0, type: 'normal', question: '', answer: '', comment: '', media: [] });
+      activeRound = 'F'; setDirty(); return render();
+    }
+    if (d.addFinalTheme !== undefined) {
+      pkg.questions.push({ number: nextNum(), round: 'F', theme: `Фінальна тема ${Svoya.rounds(pkg).find((r) => r.isFinal).themes.length + 1}`, value: 0, type: 'normal', question: '', answer: '', comment: '', media: [] });
+      setDirty(); return render();
+    }
+    if (d.delRound) {
+      if (!confirm('Видалити цей раунд з усіма темами й запитаннями?')) return;
+      pkg.questions = pkg.questions.filter((q) => String(q.round) !== d.delRound);
+      if (pkg.tags_data.__rounds) delete pkg.tags_data.__rounds[d.delRound];
+      activeRound = null; setDirty(); return render();
+    }
+    if (d.addTheme !== undefined) {
+      const r = Svoya.rounds(pkg).find((x) => x.key === activeRound);
+      const sample = r.themes[0] ? r.themes[0].questions.map((q) => q.value) : [1, 2, 3, 4, 5].map((i) => 100 * Number(activeRound) * i);
+      let n = r.themes.length + 1; while (r.themes.some((t) => t.name === `Тема ${n}`)) n++;
+      sample.forEach((v) => pkg.questions.push({ number: nextNum(), round: Number(activeRound), theme: `Тема ${n}`, value: v, type: 'normal', question: '', answer: '', comment: '', media: [] }));
+      setDirty(); return render();
+    }
+    if (d.addCell) {
+      const r = Svoya.rounds(pkg).find((x) => x.key === activeRound);
+      const th = r.themes.find((t) => t.name === d.addCell);
+      const vals = th.questions.map((q) => q.value);
+      const step = vals.length > 1 ? vals[vals.length - 1] - vals[vals.length - 2] : 100 * Number(activeRound);
+      pkg.questions.push({ number: nextNum(), round: Number(activeRound), theme: th.name, value: (vals[vals.length - 1] || 0) + step, type: 'normal', question: '', answer: '', comment: '', media: [] });
+      setDirty(); return render();
+    }
+    if (d.delTheme) {
+      if (!confirm(`Видалити тему «${d.delTheme}»?`)) return;
+      pkg.questions = pkg.questions.filter((q) => !(String(q.round) === activeRound && q.theme === d.delTheme));
+      setDirty(); return render();
+    }
+  });
+}
+
+// ---- Медіа ----
+let mediaTarget = null;
+function pickMedia(num, kind) {
+  mediaTarget = num;
+  const inp = document.getElementById('mediaFile');
+  inp.accept = kind === 'image' ? 'image/*' : kind === 'audio' ? 'audio/*' : 'video/*';
+  inp.value = '';
+  inp.click();
+}
+document.getElementById('mediaFile').addEventListener('change', async (e) => {
+  const file = e.target.files[0]; const num = mediaTarget;
+  if (!file || num == null) return;
+  if (file.size > 50 * 1024 * 1024) { toast('Файл завеликий (максимум 50 МБ)', 'error'); return; }
+  const st = document.getElementById('up_' + num);
+  if (st) st.textContent = `⏳ Завантаження «${file.name}»…`;
+  try {
+    const url = await dbUploadMedia(file, pkg.id);
+    byNum(num).media.push({ type: mediaTypeFromUrl(file.name, file.type), url, name: file.name });
+    setDirty();
+    toast('Файл додано — не забудьте зберегти пакет', 'success');
+  } catch (err) {
+    toast('Не вдалося завантажити файл: ' + err.message, 'error');
+  }
+  refreshAfterMedia();
+});
+function refreshAfterMedia() {
+  if (editingNum != null) { const n = editingNum; openCell(n); } else render();
+}
+
+// ---- Імпорт тексту ----
+function openImport() {
+  document.getElementById('impHelp').textContent = isGluzdo()
+    ? 'Формат:\n# Тур 1: Розминка\n1. Текст запитання\nВідповідь: …\nКоментар: …\nКартинка: https://…   (або Аудіо: / Відео:)\n\n2. …\n# Тур 2: Музичний\n1. …'
+    : 'Формат:\n# Раунд 1\n## Столиці\n100. Столиця України? | Київ\n200 [кіт]. Текст запитання\nВідповідь: …\nТема кота: Річки\n300 [аукціон]. Текст\nВідповідь: …\nКартинка: https://…\n## Друга тема\n…\n# Фінал\n## Поезія\nТекст фінального запитання\nВідповідь: …';
+  document.getElementById('impText').value = '';
+  openModal('importModal');
+}
+function applyImport() {
+  const text = document.getElementById('impText').value;
+  const mode = document.querySelector('[name=impMode]:checked').value;
+  if (isGluzdo()) {
+    const r = Gluzdo.parseText(text);
+    if (!r.questions.length) { toast('Не знайдено жодного запитання', 'error'); return; }
+    let offset = 0;
+    if (mode === 'replace') { pkg.questions = []; pkg.tags_data.__tours = {}; }
+    else offset = Gluzdo.tours(pkg).reduce((m, t) => Math.max(m, t.tour), 0) - (r.questions[0].tour - 1);
+    if (offset < 0) offset = 0;
+    pkg.tags_data.__tours = pkg.tags_data.__tours || {};
+    Object.entries(r.tourNames).forEach(([k, v]) => { pkg.tags_data.__tours[Number(k) + offset] = v; });
+    r.questions.forEach((q) => pkg.questions.push({ ...q, number: nextNum(), tour: q.tour + offset }));
+    toast(`Імпортовано ${r.questions.length} запитань`, 'success');
+  } else {
+    const r = Svoya.parseText(text);
+    if (!r.questions.length) { toast('Не знайдено жодного запитання', 'error'); return; }
+    if (mode === 'replace') { pkg.questions = []; pkg.tags_data.__rounds = {}; }
+    pkg.tags_data.__rounds = pkg.tags_data.__rounds || {};
+    Object.assign(pkg.tags_data.__rounds, r.roundNames);
+    r.questions.forEach((q) => pkg.questions.push({ ...q, number: nextNum() }));
+    activeRound = null;
+    toast(`Імпортовано ${r.questions.length} запитань`, 'success');
+  }
+  setDirty();
+  closeModal('importModal');
+  render();
+}
+</script>
+</body>
+</html>
