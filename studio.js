@@ -386,28 +386,35 @@ const Sound = {
 //  ПІСОЧНИЙ ГОДИННИК (SVG)
 // ════════════════════════════════════════════
 const Hourglass = {
-  top: $('sandTop'), bot: $('sandBot'), stream: $('sandStream'),
+  full: $('hgFull'), end: $('hgEnd'), stream: $('hgStream'), last: '',
+  // Координати в пікселях вихідних кадрів 1024×1536.
+  // Шар «повний» (пісок угорі) показується в смузі між поверхнею піску вгорі та гіркою внизу;
+  // поза смугою видно шар «кінець» (пісок унизу). Так пісок справді пересипається.
+  G: { H: 1536, top0: 196, neck: 728, bottom: 1314, edgeEnd: 955, peakEnd: 878, xl: 21.5, xr: 78.5 },
   render(p) {
     p = clamp(p, 0, 1);
-    // Верхня колба: обсяг конуса ∝ d³, тож рівень спадає повільно на початку
-    if (p >= 0.999) this.top.setAttribute('d', '');
-    else {
-      const d = 108 * Math.cbrt(1 - p);
-      const y = 168 - d;
-      const dip = 9 * Math.min(1, p * 6) * (1 - p);
-      this.top.setAttribute('d', `M0,${y.toFixed(2)} Q100,${(y + dip * 2).toFixed(2)} 200,${y.toFixed(2)} L200,180 L0,180 Z`);
+    const g = this.G;
+    const yt = g.neck - (g.neck - g.top0) * Math.cbrt(1 - p);          // рівень у верхній колбі
+    const dip = 16 * Math.min(1, p * 5) * (1 - p);                     // лійка в центрі
+    const h = (1 - Math.cbrt(1 - 0.919 * p)) / (1 - Math.cbrt(0.081)); // наповнення нижньої колби
+    const edge = g.bottom - (g.bottom - g.edgeEnd) * h;
+    const peak = edge - (g.edgeEnd - g.peakEnd) * Math.sqrt(p);
+    const Y = (v) => `${(v / g.H * 100).toFixed(2)}%`;
+    const pts = [`${g.xl}% ${Y(yt)}`, `50% ${Y(yt + dip)}`, `${g.xr}% ${Y(yt)}`, `${g.xr}% ${Y(edge)}`];
+    for (let k = 1; k < 10; k++) {
+      const x = g.xr - (g.xr - g.xl) * k / 10;
+      const u = Math.abs(x - 50) / (g.xr - 50);
+      pts.push(`${x.toFixed(2)}% ${Y(peak + (edge - peak) * Math.pow(u, 1.25))}`);
     }
-    // Нижня колба: наповнюється знизу (широка частина) + гірка
-    let surface = 306;
-    if (p <= 0.001) this.bot.setAttribute('d', '');
-    else {
-      const h = 134 * (1 - Math.cbrt(1 - 0.919 * p));
-      const yb = 306 - h * 0.8;
-      const m = 5 + 15 * Math.sqrt(p);
-      surface = yb - m;
-      this.bot.setAttribute('d', `M0,312 L0,${yb.toFixed(2)} Q100,${(yb - 2 * m).toFixed(2)} 200,${yb.toFixed(2)} L200,312 Z`);
-    }
-    this.stream.setAttribute('y2', surface.toFixed(1));
+    pts.push(`${g.xl}% ${Y(edge)}`);
+    const band = pts.join(',');
+    if (band === this.last) return;
+    this.last = band;
+    this.full.style.clipPath = `polygon(${band})`;
+    this.end.style.clipPath = `polygon(evenodd, 0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%, ${band}, ${pts[0]}, 0% 0%)`;
+    const st = g.neck + 6;
+    this.stream.style.top = Y(st);
+    this.stream.style.height = p >= 0.999 ? '0' : Y(Math.max(0, peak - st));
   },
 };
 
@@ -525,159 +532,75 @@ const Timer = {
 // ════════════════════════════════════════════
 const Spinner = {
   angle: 152, raf: 0, running: false, final: 0, resolve: null,
-  pointer: null, ghosts: [], stripes: null, stripeLayer: null, sheen: null, figure: $('topFigure'),
+  pointer: null, ghosts: [], sheen: $('topSheen'), figure: $('topFigure'),
 
   build() {
     const step = 360 / SECTORS;
     const pt = (r, deg) => { const a = (deg - 90) * Math.PI / 180; return [+(r * Math.cos(a)).toFixed(2), +(r * Math.sin(a)).toFixed(2)]; };
+    // Геометрія фото столу: радіус 472 одиниці; кільця й конверти виміряно на зображенні
+    const R = 472, side = (2 * R) / 0.9638, rIn = 0.396 * R, rOut = 0.962 * R, rEnv = 0.677 * R;
+    const ew = 0.164 * R, eh = 0.102 * R;
     let s = `
     <defs>
-      <radialGradient id="tbWood" cx="50%" cy="50%" r="50%">
-        <stop offset="0%" stop-color="#70503a"/><stop offset="40%" stop-color="#60432e"/>
-        <stop offset="78%" stop-color="#4a3222"/><stop offset="96%" stop-color="#2f2015"/><stop offset="100%" stop-color="#1e140d"/>
-      </radialGradient>
       <radialGradient id="tbShadow" cx="50%" cy="50%" r="50%">
         <stop offset="80%" stop-color="#000" stop-opacity=".6"/><stop offset="100%" stop-color="#000" stop-opacity="0"/>
       </radialGradient>
-      <linearGradient id="tbBrass" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stop-color="#f1e0b4"/><stop offset="35%" stop-color="#c5a46c"/>
-        <stop offset="65%" stop-color="#7a5c34"/><stop offset="100%" stop-color="#e1c58d"/>
-      </linearGradient>
-      <radialGradient id="tbDisk" cx="40%" cy="36%" r="72%">
-        <stop offset="0%" stop-color="#f6e6bd"/><stop offset="35%" stop-color="#c5a46c"/>
-        <stop offset="75%" stop-color="#86683b"/><stop offset="100%" stop-color="#4e3820"/>
-      </radialGradient>
       <radialGradient id="tbHl" cx="50%" cy="50%" r="50%">
-        <stop offset="35%" stop-color="#e1c58d" stop-opacity="0"/><stop offset="100%" stop-color="#f3dca5" stop-opacity=".62"/>
+        <stop offset="35%" stop-color="#e1c58d" stop-opacity="0"/><stop offset="100%" stop-color="#f3dca5" stop-opacity=".5"/>
       </radialGradient>
       <radialGradient id="tbTopShadow" cx="50%" cy="50%" r="50%">
-        <stop offset="0%" stop-color="#000" stop-opacity=".65"/><stop offset="100%" stop-color="#000" stop-opacity="0"/>
+        <stop offset="0%" stop-color="#000" stop-opacity=".55"/><stop offset="100%" stop-color="#000" stop-opacity="0"/>
       </radialGradient>
-      <radialGradient id="tbSheen" cx="36%" cy="26%" r="70%">
-        <stop offset="0%" stop-color="#fff6e0" stop-opacity=".13"/><stop offset="60%" stop-color="#fff6e0" stop-opacity="0"/>
-      </radialGradient>
-      <filter id="tbGrain" x="0" y="0" width="100%" height="100%">
-        <feTurbulence type="fractalNoise" baseFrequency="0.0032 0.055" numOctaves="3" seed="11"/>
-        <feColorMatrix type="matrix" values="0 0 0 0 0.09  0 0 0 0 0.05  0 0 0 0 0.02  0 0 0 1.1 -0.42"/>
-        <feComposite in2="SourceGraphic" operator="in"/>
-      </filter>
+      <filter id="envGlowF" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
     </defs>
-    <circle r="505" cy="26" fill="url(#tbShadow)"/>
-    <circle r="472" fill="url(#tbWood)"/>
-    <circle r="472" fill="#000" filter="url(#tbGrain)"/>
-    <circle r="466" fill="none" stroke="url(#tbBrass)" stroke-width="5"/>
-    <circle r="450" fill="none" stroke="#c5a46c" stroke-opacity=".32" stroke-width="1.5"/>
-    <circle r="174" fill="none" stroke="#c5a46c" stroke-opacity=".55" stroke-width="2"/>`;
+    <circle r="508" cy="28" fill="url(#tbShadow)"/>
+    <image href="assets/studio/table.webp" x="${-side / 2}" y="${-side / 2}" width="${side}" height="${side}" preserveAspectRatio="xMidYMid meet"/>`;
     for (let i = 0; i < SECTORS; i++) {
       const a0 = i * step, a1 = (i + 1) * step, ac = (i + 0.5) * step;
-      const [x0, y0] = pt(176, a0), [x1, y1] = pt(446, a0), [x2, y2] = pt(446, a1), [x3, y3] = pt(176, a1);
-      s += `<path class="sector-hl" id="secHl${i}" d="M${x0},${y0} L${x1},${y1} A446,446 0 0 1 ${x2},${y2} L${x3},${y3} A176,176 0 0 0 ${x0},${y0} Z" fill="url(#tbHl)"/>`;
-      s += `<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" stroke="#c5a46c" stroke-opacity=".42" stroke-width="2"/>`;
-      const [ex, ey] = pt(316, ac);
-      s += `<g class="envelope" id="env${i}" transform="translate(${ex},${ey}) rotate(${ac.toFixed(2)})">
-        <rect x="-36" y="-24" width="72" height="48" rx="3" fill="#efe3c8" stroke="#b99a63" stroke-width="2"/>
-        <path d="M-36,-24 L0,5 L36,-24" fill="none" stroke="#a98a57" stroke-width="2"/>
-        <circle cy="5" r="6" fill="#7e2a32"/></g>`;
-      const [nx, ny] = pt(405, ac);
-      const rot = (ac > 90 && ac < 270) ? ac + 180 : ac;
-      s += `<text class="sector-num" x="${nx}" y="${ny}" transform="rotate(${rot.toFixed(2)} ${nx} ${ny})" text-anchor="middle" dominant-baseline="central" font-size="36" fill="#e1c58d">${i + 1}</text>`;
+      const [x0, y0] = pt(rIn, a0), [x1, y1] = pt(rOut, a0), [x2, y2] = pt(rOut, a1), [x3, y3] = pt(rIn, a1);
+      s += `<path class="sector-hl" id="secHl${i}" d="M${x0},${y0} L${x1},${y1} A${rOut},${rOut} 0 0 1 ${x2},${y2} L${x3},${y3} A${rIn},${rIn} 0 0 0 ${x0},${y0} Z" fill="url(#tbHl)" style="mix-blend-mode:screen"/>`;
+      const [ex, ey] = pt(rEnv, ac);
+      s += `<g transform="translate(${ex},${ey}) rotate(${ac.toFixed(2)})">
+        <rect class="env-glow" id="envGlow${i}" x="${-ew / 2 - 6}" y="${-eh / 2 - 6}" width="${ew + 12}" height="${eh + 12}" rx="8" fill="none" stroke="#ffe7b0" stroke-width="6" filter="url(#envGlowF)"/>
+        <rect class="env-shade" id="envShade${i}" x="${-ew / 2}" y="${-eh / 2}" width="${ew}" height="${eh}" rx="3" fill="#1c0f08" fill-opacity=".62"/></g>`;
     }
-    for (let k = 0; k < 72; k++) {
-      const [ax, ay] = pt(154, k * 5), [bx, by] = pt(k % 6 === 0 ? 168 : 161, k * 5);
-      s += `<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="#e1c58d" stroke-opacity=".5" stroke-width="1.5"/>`;
-    }
-    s += `
-    <circle r="150" fill="url(#tbDisk)"/>
-    <circle r="138" fill="none" stroke="#4e3820" stroke-opacity=".5" stroke-width="2"/>
-    <circle r="118" fill="none" stroke="#f6e6bd" stroke-opacity=".35" stroke-width="1.5"/>
-    <circle r="100" fill="url(#tbTopShadow)"/>
-    <circle r="472" fill="url(#tbSheen)"/>`;
+    s += `<circle r="96" fill="url(#tbTopShadow)"/>`;
     $('tableSvg').innerHTML = s;
 
-    // Стрілка — окремий шар, обертається лише CSS-трансформацією (композитор, 60 FPS)
+    // Стрілка: тінь + «шлейф» розмиття + сама стрілка. Обертаються лише CSS-трансформацією.
     const plane = document.querySelector('.table-plane');
-    const ptrSvg = (cls, inner) => {
+    const layer = (cls, wrapShadow) => {
       const d = document.createElement('div');
       d.className = 'pointer-layer ' + cls;
-      d.innerHTML = `<svg viewBox="-500 -500 1000 1000">${inner}</svg>`;
-      plane.appendChild(d);
+      d.innerHTML = '<img class="pointer-img" src="assets/studio/pointer.webp" alt="" draggable="false" />';
+      if (wrapShadow) {
+        const w = document.createElement('div');
+        w.className = 'pointer-shadow-wrap';
+        w.appendChild(d);
+        plane.appendChild(w);
+      } else plane.appendChild(d);
       return d;
     };
-    const arrow = 'M0,-322 L15,-70 L10,36 L-10,36 L-15,-70 Z';
-    for (let g = 0; g < 3; g++) {
-      this.ghosts.push(ptrSvg('pointer-ghost', `<path d="${arrow}" fill="#e1c58d"/>`));
-    }
-    this.pointer = ptrSvg('pointer-main', `
-      <defs>
-        <linearGradient id="ptrBrass" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stop-color="#6e5230"/><stop offset="45%" stop-color="#f3dfae"/>
-          <stop offset="55%" stop-color="#c5a46c"/><stop offset="100%" stop-color="#5a4127"/>
-        </linearGradient>
-      </defs>
-      <path d="${arrow}" fill="#000" opacity=".38" transform="translate(9,14)"/>
-      <circle cy="66" r="24" fill="#000" opacity=".38" transform="translate(9,14)"/>
-      <path d="${arrow}" fill="url(#ptrBrass)" stroke="#3a2716" stroke-width="2.5" stroke-linejoin="round"/>
-      <path d="M0,-312 L0,30" stroke="#fff3d2" stroke-opacity=".55" stroke-width="2"/>
-      <circle cy="66" r="24" fill="url(#ptrBrass)" stroke="#3a2716" stroke-width="2.5"/>
-      <circle cy="66" r="9" fill="#3a2716" opacity=".6"/>`);
-
-    // Дзиґа (вигляд збоку — «білборд» над центром столу)
-    $('topSvg').innerHTML = `
-      <defs>
-        <linearGradient id="topBrass" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stop-color="#3a2716"/><stop offset="10%" stop-color="#7a5c34"/>
-          <stop offset="28%" stop-color="#f6e6bd"/><stop offset="38%" stop-color="#e1c58d"/>
-          <stop offset="62%" stop-color="#a9864f"/><stop offset="86%" stop-color="#5e4428"/><stop offset="100%" stop-color="#2e1f12"/>
-        </linearGradient>
-        <linearGradient id="topShade" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#fff3d2" stop-opacity=".22"/><stop offset="45%" stop-color="#fff3d2" stop-opacity="0"/>
-          <stop offset="60%" stop-color="#1a1008" stop-opacity="0"/><stop offset="100%" stop-color="#1a1008" stop-opacity=".55"/>
-        </linearGradient>
-        <linearGradient id="topSheen" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stop-color="#fff3d2" stop-opacity="0"/><stop offset="35%" stop-color="#fff3d2" stop-opacity=".55"/>
-          <stop offset="50%" stop-color="#fff3d2" stop-opacity=".15"/><stop offset="70%" stop-color="#fff3d2" stop-opacity=".35"/>
-          <stop offset="100%" stop-color="#fff3d2" stop-opacity="0"/>
-        </linearGradient>
-        <pattern id="topStripes" width="36" height="300" patternUnits="userSpaceOnUse">
-          <rect x="0" width="7" height="300" fill="#2a1a0c" opacity=".55"/>
-          <rect x="17" width="3" height="300" fill="#fff3d2" opacity=".45"/>
-        </pattern>
-        <clipPath id="topBodyClip"><path d="M120,96 C60,98 14,138 12,164 C10,186 62,226 114,286 Q120,293 126,286 C178,226 230,186 228,164 C226,138 180,98 120,96 Z"/></clipPath>
-      </defs>
-      <rect x="111" y="16" width="18" height="86" rx="7" fill="url(#topBrass)"/>
-      <ellipse cx="120" cy="18" rx="14" ry="9" fill="url(#topBrass)"/>
-      <ellipse cx="120" cy="16" rx="9" ry="4" fill="#fff3d2" opacity=".35"/>
-      <path d="M120,96 C60,98 14,138 12,164 C10,186 62,226 114,286 Q120,293 126,286 C178,226 230,186 228,164 C226,138 180,98 120,96 Z" fill="url(#topBrass)"/>
-      <g clip-path="url(#topBodyClip)">
-        <rect id="topStripeLayer" x="0" y="90" width="240" height="210" fill="url(#topStripes)" opacity=".5"/>
-        <rect x="0" y="90" width="240" height="210" fill="url(#topShade)"/>
-        <rect x="0" y="156" width="240" height="18" fill="#3a2716" opacity=".55"/>
-        <rect x="0" y="157" width="240" height="2" fill="#fff3d2" opacity=".35"/>
-        <path d="M20,136 Q120,150 220,136" fill="none" stroke="#3a2716" stroke-opacity=".5" stroke-width="2"/>
-        <path d="M40,206 Q120,218 200,206" fill="none" stroke="#3a2716" stroke-opacity=".5" stroke-width="2"/>
-        <rect id="topSheenLayer" x="0" y="90" width="240" height="210" fill="url(#topSheen)" opacity="0"/>
-      </g>
-      <path d="M40,118 C70,102 100,98 120,98" fill="none" stroke="#fff3d2" stroke-opacity=".5" stroke-width="2.5" stroke-linecap="round"/>
-      <ellipse cx="120" cy="100" rx="24" ry="6" fill="#4e3820"/>
-      <ellipse cx="120" cy="98.5" rx="18" ry="3.5" fill="#e1c58d" opacity=".6"/>
-      <path d="M113,284 L120,298 L127,284 Z" fill="#2a2a2e"/>`;
-    this.stripes = document.getElementById('topStripes');
-    this.stripeLayer = document.getElementById('topStripeLayer');
-    this.sheen = document.getElementById('topSheenLayer');
+    this.shadow = layer('pointer-shadow', true);
+    for (let g = 0; g < 3; g++) this.ghosts.push(layer('pointer-ghost'));
+    this.pointer = layer('pointer-main');
     this.apply(this.angle, 0, 0);
   },
   sectorAngle(i) { return (i + 0.5) * 360 / SECTORS; },
   apply(angle, v, now) {
-    this.pointer.style.transform = `rotate(${angle.toFixed(2)}deg)`;
+    const tf = `rotate(${angle.toFixed(2)}deg)`;
+    this.pointer.style.transform = tf;
+    if (this.shadow) this.shadow.style.transform = tf;
     this.ghosts.forEach((g, i) => {
-      const op = v > 0.05 ? (v * 0.32) / (i + 1) : 0;
+      const op = v > 0.05 ? (v * 0.3) / (i + 1) : 0;
       g.style.opacity = op.toFixed(3);
       if (op) g.style.transform = `rotate(${(angle - (i + 1) * (4 + v * 13)).toFixed(2)}deg)`;
     });
-    const off = ((-angle * 0.9) % 36 + 36) % 36;
-    this.stripes.setAttribute('patternTransform', `translate(${off.toFixed(2)},0)`);
-    this.stripeLayer.setAttribute('opacity', (0.5 * Math.pow(1 - v, 2)).toFixed(3));
-    this.sheen.setAttribute('opacity', (v * 0.65).toFixed(3));
+    // Блиск на корпусі дзиґи: смуги «біжать» зі швидкістю обертання
+    if (this.sheen) {
+      this.sheen.style.opacity = (v * 0.95).toFixed(3);
+      if (v > 0.01) this.sheen.style.backgroundPosition = `${(-angle * 0.55).toFixed(1)}px 0`;
+    }
     if (v > 0.02 && !prefs.reducedMotion) {
       this.figure.style.transform = `translateX(${(Math.sin(now / 41) * v * 1.4).toFixed(2)}px) rotate(${(Math.sin(now / 67) * v * 1.8).toFixed(2)}deg)`;
     } else this.figure.style.transform = '';
@@ -735,6 +658,12 @@ const Spinner = {
     this.running = false;
     this.setAngle(this.final);
     Sound.whirrStop();
+    if (!prefs.reducedMotion && this.figure.animate) {
+      this.figure.animate([
+        { transform: 'rotate(1.8deg)' }, { transform: 'rotate(-1.2deg)' }, { transform: 'rotate(0.7deg)' },
+        { transform: 'rotate(-0.3deg)' }, { transform: 'rotate(0deg)' },
+      ], { duration: 950, easing: 'ease-out' });
+    }
     const r = this.resolve; this.resolve = null;
     if (r) r();
   },
@@ -744,11 +673,14 @@ const Spinner = {
     if (this.running) { this.running = false; this.resolve = null; Sound.whirrStop(); this.apply(this.angle, 0, 0); }
   },
   highlight(sector) {
-    for (let i = 0; i < SECTORS; i++) $('secHl' + i).classList.toggle('on', i === sector);
+    for (let i = 0; i < SECTORS; i++) {
+      $('secHl' + i).classList.toggle('on', i === sector);
+      $('envGlow' + i).classList.toggle('on', i === sector);
+    }
   },
   setUsed(list, current = null) {
     const set = new Set(list || []);
-    for (let i = 0; i < SECTORS; i++) $('env' + i).classList.toggle('used', set.has(i) && i !== current);
+    for (let i = 0; i < SECTORS; i++) $('envShade' + i).classList.toggle('used', set.has(i) && i !== current);
   },
 };
 
@@ -831,7 +763,11 @@ const Engine = {
         if (['DISCUSSION', 'DISCUSSION_PAUSED', 'TIME_EXPIRED'].includes(from)) Timer.set(S.config.timerDuration);
         break;
       case 'DISCUSSION':
-        if (from === 'QUESTION_VISIBLE') { Timer.set(S.config.timerDuration); Sound.play('timerStart'); }
+        if (from === 'QUESTION_VISIBLE') {
+          Timer.set(S.config.timerDuration);
+          Sound.play('timerStart');
+          const tp = $('timerPanel'); tp.classList.remove('glint'); void tp.offsetWidth; tp.classList.add('glint');
+        }
         Timer.start();
         break;
       case 'DISCUSSION_PAUSED':
@@ -1638,26 +1574,27 @@ function onKey(e) {
 //  ДЕКОР: годинник і емблема
 // ════════════════════════════════════════════
 function buildDecor() {
-  let ticks = '';
-  for (let i = 0; i < 12; i++) {
-    const a = (i * 30 - 90) * Math.PI / 180;
-    ticks += `<line x1="${100 + Math.cos(a) * 42}" y1="${92 + Math.sin(a) * 42}" x2="${100 + Math.cos(a) * 47}" y2="${92 + Math.sin(a) * 47}"/>`;
-  }
-  $('clockTicks').innerHTML = ticks;
+  // Настінний годинник показує справжній час
+  const hour = $('clockHour'), min = $('clockMin');
   const tickClock = () => {
     const d = new Date();
-    const m = d.getMinutes(), h = (d.getHours() % 12) + m / 60;
-    $('clockHour').setAttribute('transform', `rotate(${h * 30} 100 92)`);
-    $('clockMin').setAttribute('transform', `rotate(${m * 6} 100 92)`);
+    const m = d.getMinutes() + d.getSeconds() / 60, h = (d.getHours() % 12) + m / 60;
+    hour.style.transform = `rotate(${(h * 30).toFixed(2)}deg)`;
+    min.style.transform = `rotate(${(m * 6).toFixed(2)}deg)`;
   };
   tickClock();
-  setInterval(tickClock, 30000);
-  let et = '';
-  for (let i = 0; i < 60; i++) {
-    const a = (i * 6) * Math.PI / 180, r1 = i % 5 === 0 ? 74 : 78;
-    et += `<line x1="${100 + Math.cos(a) * r1}" y1="${100 + Math.sin(a) * r1}" x2="${100 + Math.cos(a) * 81}" y2="${100 + Math.sin(a) * 81}" stroke-width="${i % 5 === 0 ? 1.6 : 0.8}"/>`;
+  setInterval(tickClock, 10000);
+  // Пилинки у світлі прожектора (кілька, ледь помітні)
+  const dust = $('sceneDust');
+  let html = '';
+  for (let i = 0; i < 16; i++) {
+    const size = (1.5 + Math.random() * 2.5).toFixed(1);
+    const dur = (16 + Math.random() * 18).toFixed(1);
+    html += `<span class="dust" style="left:${(38 + Math.random() * 24).toFixed(1)}%;top:${(10 + Math.random() * 60).toFixed(1)}%;width:${size}px;height:${size}px;` +
+      `--dx:${(Math.random() * 60 - 30).toFixed(0)}px;--dy:${(-60 - Math.random() * 120).toFixed(0)}px;--o:${(0.25 + Math.random() * 0.4).toFixed(2)};` +
+      `animation-duration:${dur}s;animation-delay:-${(Math.random() * dur).toFixed(1)}s"></span>`;
   }
-  document.querySelector('.emblem-ticks').innerHTML = et;
+  dust.innerHTML = html;
 }
 
 // ════════════════════════════════════════════
